@@ -49,6 +49,34 @@ impl Direction {
             Direction::SouthEast => 7,
         }
     }
+    pub const fn all() -> [Direction; 8] {
+        [
+            Direction::West,
+            Direction::East,
+            Direction::North,
+            Direction::South,
+            Direction::NorthWest,
+            Direction::NorthEast,
+            Direction::SouthWest,
+            Direction::SouthEast,
+        ]
+    }
+    pub const fn orthagonal() -> [Direction; 4] {
+        [
+            Direction::West,
+            Direction::East,
+            Direction::North,
+            Direction::South,
+        ]
+    }
+    pub const fn diagonal() -> [Direction; 4] {
+        [
+            Direction::NorthWest,
+            Direction::NorthEast,
+            Direction::SouthWest,
+            Direction::SouthEast,
+        ]
+    }
 }
 
 impl<T, const N: usize> Index<Direction> for [T; N] {
