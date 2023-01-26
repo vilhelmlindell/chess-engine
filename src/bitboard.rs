@@ -32,7 +32,7 @@ impl Direction {
             Direction::West => -1,
             Direction::East => 1,
             Direction::NorthWest => -9,
-            Direction::NorthEast => -8,
+            Direction::NorthEast => -7,
             Direction::SouthWest => 7,
             Direction::SouthEast => 9,
         }

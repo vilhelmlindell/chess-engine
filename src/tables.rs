@@ -71,7 +71,7 @@ fn precompute_attack_rays() -> [[Bitboard; 8]; 64] {
         Direction::NorthWest,
         Direction::NorthEast,
         Direction::SouthWest,
-        Direction::SouthWest,
+        Direction::SouthEast,
     ];
     for square in 0..64 {
         let mut square_attack_rays = [Bitboard(0); 8];
@@ -91,7 +91,6 @@ fn get_bishop_moves_traditional(square: usize, blockers: Bitboard) -> Bitboard {
     let mut attacks = Bitboard(0);
 
     attacks |= ATTACK_RAYS[square][Direction::NorthWest];
-    println!("{}", attacks);
     if ATTACK_RAYS[square][Direction::NorthWest] & blockers != 0 {
         let blocker_index =
             (ATTACK_RAYS[square][Direction::NorthWest] & blockers).leading_zeros() as usize;
@@ -99,7 +98,6 @@ fn get_bishop_moves_traditional(square: usize, blockers: Bitboard) -> Bitboard {
     }
 
     attacks |= ATTACK_RAYS[square][Direction::NorthEast];
-    println!("{}", attacks);
     if ATTACK_RAYS[square][Direction::NorthEast] & blockers != 0 {
         let blocker_index =
             (ATTACK_RAYS[square][Direction::NorthEast] & blockers).leading_zeros() as usize;
