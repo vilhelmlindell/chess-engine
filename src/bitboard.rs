@@ -1,7 +1,4 @@
-use derive_more::{
-    BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, MulAssign, Not, Shl, ShlAssign,
-    Shr, ShrAssign,
-};
+use derive_more::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, MulAssign, Not, Shl, ShlAssign, Shr, ShrAssign};
 use std::fmt::Display;
 use std::ops::Deref;
 use std::ops::Index;
@@ -60,20 +57,10 @@ impl Direction {
         ]
     }
     pub const fn orthagonal() -> [Direction; 4] {
-        [
-            Direction::West,
-            Direction::East,
-            Direction::North,
-            Direction::South,
-        ]
+        [Direction::West, Direction::East, Direction::North, Direction::South]
     }
     pub const fn diagonal() -> [Direction; 4] {
-        [
-            Direction::NorthWest,
-            Direction::NorthEast,
-            Direction::SouthWest,
-            Direction::SouthEast,
-        ]
+        [Direction::NorthWest, Direction::NorthEast, Direction::SouthWest, Direction::SouthEast]
     }
 }
 
@@ -90,25 +77,7 @@ impl<T, const N: usize> IndexMut<Direction> for [T; N] {
     }
 }
 
-#[derive(
-    MulAssign,
-    ShrAssign,
-    ShlAssign,
-    BitOrAssign,
-    BitAndAssign,
-    BitXorAssign,
-    BitAnd,
-    BitOr,
-    BitXor,
-    Shr,
-    Shl,
-    Not,
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-)]
+#[derive(MulAssign, ShrAssign, ShlAssign, BitOrAssign, BitAndAssign, BitXorAssign, BitAnd, BitOr, BitXor, Shr, Shl, Not, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
@@ -194,9 +163,6 @@ mod tests {
     #[test]
     fn shifts_bits_correctly() {
         let bitboard = Bitboard(0x00FF000000000000);
-        assert_eq!(
-            bitboard.shift(&Direction::NorthEast),
-            Bitboard(0x0000fe0000000000)
-        );
+        assert_eq!(bitboard.shift(&Direction::NorthEast), Bitboard(0x0000fe0000000000));
     }
 }

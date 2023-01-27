@@ -89,10 +89,7 @@ impl Board {
                     let square = rank * 8 + file as usize;
                     if piece_char.is_uppercase() {
                         self.squares[square] = Some(Piece {
-                            piece_type: piece_types
-                                .get(&piece_char.to_ascii_lowercase())
-                                .copied()
-                                .unwrap(),
+                            piece_type: piece_types.get(&piece_char.to_ascii_lowercase()).copied().unwrap(),
                             side: Side::White,
                         })
                     } else {
@@ -119,19 +116,12 @@ impl Board {
     pub fn set_bitboards_from_squares(&mut self) {
         for square in 0..64u32 {
             if let Some(piece) = self.squares[square as usize] {
-                self.piece_bitboards
-                    .get_mut(&piece)
-                    .unwrap()
-                    .set_bit(&square);
+                self.piece_bitboards.get_mut(&piece).unwrap().set_bit(&square);
                 self.side_bitboards[piece.side.value() as usize].set_bit(&square);
                 self.occupied_squares.set_bit(&square);
             } else {
-                self.piece_bitboards
-                    .values_mut()
-                    .for_each(|x| x.clear_bit(&square));
-                self.side_bitboards
-                    .iter_mut()
-                    .for_each(|x| x.clear_bit(&square));
+                self.piece_bitboards.values_mut().for_each(|x| x.clear_bit(&square));
+                self.side_bitboards.iter_mut().for_each(|x| x.clear_bit(&square));
                 self.occupied_squares.clear_bit(&square);
             }
         }
@@ -214,10 +204,7 @@ mod tests {
     fn sets_correct_bitboards_from_squares() {
         let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
         board.set_bitboards_from_squares();
-        let white_pawn_bitboard = board
-            .piece_bitboards
-            .get(&Piece::new(PieceType::Pawn, Side::White))
-            .unwrap();
+        let white_pawn_bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Pawn, Side::White)).unwrap();
         assert_eq!(white_pawn_bitboard.0, 0x00FF000000000000)
     }
 }

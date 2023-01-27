@@ -2,7 +2,7 @@ use crate::bitboard::*;
 use crate::board::{Board, Side};
 use crate::piece::{Piece, PieceType};
 use crate::r#move::Move;
-use crate::tables::KNIGHT_ATTACK_MASKS;
+use crate::tables::*;
 
 pub fn generate_pawn_moves(board: &Board) -> Vec<Move> {
     let up: &Direction = match board.side_to_move {
@@ -17,16 +17,11 @@ pub fn generate_pawn_moves(board: &Board) -> Vec<Move> {
         Side::White => &Direction::NorthEast,
         Side::Black => &Direction::SouthWest,
     };
-    let mut moves = Vec::<Move>::with_capacity(16);
-    let bitboard = board
-        .piece_bitboards
-        .get(&Piece::new(PieceType::Pawn, board.side_to_move))
-        .unwrap()
-        .clone();
+    let mut moves = Vec::<Move>::new();
+    let bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Pawn, board.side_to_move)).unwrap().clone();
 
     let mut pushed_pawns = push_pawns(&bitboard, &!board.occupied_squares, &board.side_to_move);
-    let mut double_pushed_pawns =
-        push_pawns(&bitboard, &!board.occupied_squares, &board.side_to_move);
+    let mut double_pushed_pawns = push_pawns(&bitboard, &!board.occupied_squares, &board.side_to_move);
 
     while pushed_pawns != 0 {
         let square = pushed_pawns.pop_lsb();
@@ -55,17 +50,12 @@ fn push_pawns(pawns: &Bitboard, empty_squares: &Bitboard, side_to_move: &Side) -
 }
 
 pub fn generate_knight_moves(board: &Board) -> Vec<Move> {
-    let mut moves = Vec::<Move>::with_capacity(96);
-    let mut bitboard = board
-        .piece_bitboards
-        .get(&Piece::new(PieceType::Knight, board.side_to_move))
-        .unwrap()
-        .clone();
+    let mut moves = Vec::<Move>::new();
+    let mut bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Knight, board.side_to_move)).unwrap().clone();
 
     while bitboard != 0 {
         let square = bitboard.pop_lsb();
-        let mut attack_bitboard =
-            KNIGHT_ATTACK_MASKS[square as usize].clone() & !board.friendly_squares();
+        let mut attack_bitboard = KNIGHT_ATTACK_MASKS[square as usize].clone() & !board.friendly_squares();
         while attack_bitboard != 0 {
             let end_square = attack_bitboard.pop_lsb();
             moves.push(Move::new(square, end_square));
@@ -73,9 +63,48 @@ pub fn generate_knight_moves(board: &Board) -> Vec<Move> {
     }
     moves
 }
+pub fn generate_king_moves(board: &Board) -> Vec<Move> {
+    let mut moves = Vec::<Move>::new();
+    let mut bitboard = board.piece_bitboards.get(&Piece::new(PieceType::King, board.side_to_move)).unwrap().clone();
 
-//pub fn generate_bishop_moves(board: &Board) -> Vec<Move> {}
-//pub fn generate_rook_moves(board: &Board) -> Vec<Move> {}
+    while bitboard != 0 {
+        let square = bitboard.pop_lsb();
+        let mut attack_bitboard = KING_ATTACK_MASKS[square as usize].clone() & !board.friendly_squares();
+        while attack_bitboard != 0 {
+            let end_square = attack_bitboard.pop_lsb();
+            moves.push(Move::new(square, end_square));
+        }
+    }
+    moves
+}
+pub fn generate_bishop_moves(board: &Board) -> Vec<Move> {
+    let mut moves = Vec::<Move>::new();
+    let mut bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Bishop, board.side_to_move)).unwrap().clone();
+
+    while bitboard != 0 {
+        let square = bitboard.pop_lsb();
+        let mut attack_bitboard = get_bishop_attacks(&(square as usize), &board.occupied_squares);
+        while attack_bitboard != 0 {
+            let end_square = attack_bitboard.pop_lsb();
+            moves.push(Move::new(square, end_square));
+        }
+    }
+    moves
+}
+pub fn generate_rook_moves(board: &Board) -> Vec<Move> {
+    let mut moves = Vec::<Move>::new();
+    let mut bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Rook, board.side_to_move)).unwrap().clone();
+
+    while bitboard != 0 {
+        let square = bitboard.pop_lsb();
+        let mut attack_bitboard = get_rook_attacks(&(square as usize), &board.occupied_squares);
+        while attack_bitboard != 0 {
+            let end_square = attack_bitboard.pop_lsb();
+            moves.push(Move::new(square, end_square));
+        }
+    }
+    moves
+}
 //pub fn generate_queen_moves(board: &Board) -> Vec<Move> {}
 //pub fn generate_king_moves(board: &Board) -> Vec<Move> {}
 
