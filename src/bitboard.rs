@@ -2,8 +2,6 @@ use derive_more::{
     BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, MulAssign, Not, Shl, ShlAssign,
     Shr, ShrAssign,
 };
-use once_cell::sync::Lazy;
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::Deref;
 use std::ops::Index;
