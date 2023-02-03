@@ -1,81 +1,10 @@
+use crate::direction::Direction;
 use derive_more::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, MulAssign, Not, Shl, ShlAssign, Shr, ShrAssign};
 use std::fmt::Display;
 use std::ops::Deref;
-use std::ops::Index;
-use std::ops::IndexMut;
 
 const NOT_A_FILE: u64 = 0xfefefefefefefefe;
 const NOT_H_FILE: u64 = 0x7f7f7f7f7f7f7f7f;
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Direction {
-    North = 0,
-    South,
-    West,
-    East,
-    SouthWest,
-    NorthWest,
-    NorthEast,
-    SouthEast,
-}
-
-impl Direction {
-    pub const fn value(&self) -> i32 {
-        match *self {
-            Direction::North => -8,
-            Direction::South => 8,
-            Direction::West => -1,
-            Direction::East => 1,
-            Direction::NorthWest => -9,
-            Direction::NorthEast => -7,
-            Direction::SouthWest => 7,
-            Direction::SouthEast => 9,
-        }
-    }
-    pub const fn index(&self) -> usize {
-        match *self {
-            Direction::North => 0,
-            Direction::South => 1,
-            Direction::West => 2,
-            Direction::East => 3,
-            Direction::NorthWest => 4,
-            Direction::NorthEast => 5,
-            Direction::SouthWest => 6,
-            Direction::SouthEast => 7,
-        }
-    }
-    pub const fn all() -> [Direction; 8] {
-        [
-            Direction::West,
-            Direction::East,
-            Direction::North,
-            Direction::South,
-            Direction::NorthWest,
-            Direction::NorthEast,
-            Direction::SouthWest,
-            Direction::SouthEast,
-        ]
-    }
-    pub const fn orthagonal() -> [Direction; 4] {
-        [Direction::West, Direction::East, Direction::North, Direction::South]
-    }
-    pub const fn diagonal() -> [Direction; 4] {
-        [Direction::NorthWest, Direction::NorthEast, Direction::SouthWest, Direction::SouthEast]
-    }
-}
-
-impl<T, const N: usize> Index<Direction> for [T; N] {
-    type Output = T;
-
-    fn index(&self, index: Direction) -> &Self::Output {
-        &self[index as usize]
-    }
-}
-impl<T, const N: usize> IndexMut<Direction> for [T; N] {
-    fn index_mut(&mut self, index: Direction) -> &mut Self::Output {
-        &mut self[index as usize]
-    }
-}
 
 #[derive(MulAssign, ShrAssign, ShlAssign, BitOrAssign, BitAndAssign, BitXorAssign, BitAnd, BitOr, BitXor, Shr, Shl, Not, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bitboard(pub u64);
@@ -117,7 +46,7 @@ impl Bitboard {
             Direction::SouthEast => self.south_east(),
         }
     }
-    pub fn get_bit(&self, n: &u32) -> u64 {
+    pub fn bit(&self, n: &u32) -> u64 {
         (self.0 >> n) & 1
     }
     pub fn set_bit(&mut self, n: &u32) {
@@ -126,8 +55,19 @@ impl Bitboard {
     pub fn clear_bit(&mut self, n: &u32) {
         self.0 &= !(1 << n);
     }
+    pub fn lsb(&self) -> u32 {
+        self.trailing_zeros()
+    }
+    pub fn msb(&self) -> u32 {
+        63 - self.leading_zeros()
+    }
     pub fn pop_lsb(&mut self) -> u32 {
-        let index = self.trailing_zeros();
+        let index = self.lsb();
+        self.clear_bit(&index);
+        index
+    }
+    pub fn pop_msb(&mut self) -> u32 {
+        let index = self.msb();
         self.clear_bit(&index);
         index
     }
@@ -142,7 +82,7 @@ impl Display for Bitboard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for rank in 0..8 {
             for file in 0..8 {
-                write!(f, " {}", self.get_bit(&(rank * 8 + file)).to_string()).unwrap();
+                write!(f, " {}", self.bit(&(rank * 8 + file)).to_string()).unwrap();
             }
             writeln!(f).unwrap();
         }

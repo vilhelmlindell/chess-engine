@@ -1,5 +1,10 @@
 use crate::piece::Piece;
 
+pub struct CastlingRights {
+    queen_side: bool,
+    king_side: bool,
+}
+
 #[non_exhaustive]
 pub struct Move {
     pub start_square: u32,

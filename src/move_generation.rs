@@ -1,128 +1,145 @@
 use crate::bitboard::*;
-use crate::board::{Board, Side};
+use crate::board::Side;
+use crate::direction::Direction;
 use crate::piece::{Piece, PieceType};
 use crate::r#move::Move;
 use crate::tables::*;
-
-pub fn generate_pawn_moves(board: &Board) -> Vec<Move> {
-    let up: &Direction = match board.side_to_move {
-        Side::White => &Direction::North,
-        Side::Black => &Direction::South,
-    };
-    let up_left: &Direction = match board.side_to_move {
-        Side::White => &Direction::NorthWest,
-        Side::Black => &Direction::SouthEast,
-    };
-    let up_right: &Direction = match board.side_to_move {
-        Side::White => &Direction::NorthEast,
-        Side::Black => &Direction::SouthWest,
-    };
-    let mut moves = Vec::<Move>::new();
-    let bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Pawn, board.side_to_move)).unwrap().clone();
-
-    let mut pushed_pawns = push_pawns(&bitboard, &!board.occupied_squares, &board.side_to_move);
-    let mut double_pushed_pawns = push_pawns(&bitboard, &!board.occupied_squares, &board.side_to_move);
-
-    while pushed_pawns != 0 {
-        let square = pushed_pawns.pop_lsb();
-        moves.push(Move::new((square as i32 - up.value()) as u32, square));
-    }
-    while double_pushed_pawns != 0 {
-        let square = double_pushed_pawns.pop_lsb();
-        moves.push(Move::new((square as i32 - up.value() * 2) as u32, square));
-    }
-    let mut capturing_pawns_up_left = bitboard.shift(up_left) & board.enemy_squares();
-    let mut capturing_pawns_up_right = bitboard.shift(up_right) & board.enemy_squares();
-
-    while capturing_pawns_up_left != 0 {
-        let square = capturing_pawns_up_left.pop_lsb();
-        moves.push(Move::new((square as i32 - up_left.value()) as u32, square));
-    }
-    while capturing_pawns_up_right != 0 {
-        let square = capturing_pawns_up_right.pop_lsb();
-        moves.push(Move::new((square as i32 - up_right.value()) as u32, square));
-    }
-    moves
-}
 
 fn push_pawns(pawns: &Bitboard, empty_squares: &Bitboard, side_to_move: &Side) -> Bitboard {
     (pawns.north() >> ((side_to_move.value()) << 4)) & *empty_squares
 }
 
-pub fn generate_knight_moves(board: &Board) -> Vec<Move> {
-    let mut moves = Vec::<Move>::new();
-    let mut bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Knight, board.side_to_move)).unwrap().clone();
+impl Board {
+    pub fn generate_moves(&self) -> Vec<Move> {
+        let mut moves = Vec::<Move>::with_capacity(218);
+        self.generate_pawn_moves(&mut moves);
+        self.generate_knight_moves(&mut moves);
+        self.generate_bishop_moves(&mut moves);
+        self.generate_rook_moves(&mut moves);
+        self.generate_queen_moves(&mut moves);
+        self.generate_king_moves(&mut moves);
+        moves
+    }
 
-    while bitboard != 0 {
-        let square = bitboard.pop_lsb();
-        let mut attack_bitboard = KNIGHT_ATTACK_MASKS[square as usize].clone() & !board.friendly_squares();
-        while attack_bitboard != 0 {
-            let end_square = attack_bitboard.pop_lsb();
-            moves.push(Move::new(square, end_square));
+    pub fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
+        let up: &Direction = match self.side_to_move {
+            Side::White => &Direction::North,
+            Side::Black => &Direction::South,
+        };
+        let up_left: &Direction = match self.side_to_move {
+            Side::White => &Direction::NorthWest,
+            Side::Black => &Direction::SouthEast,
+        };
+        let up_right: &Direction = match self.side_to_move {
+            Side::White => &Direction::NorthEast,
+            Side::Black => &Direction::SouthWest,
+        };
+        let bitboard = self.piece_bitboards[Piece::new(&PieceType::Pawn, &self.side_to_move)];
+
+        let mut pushed_pawns = push_pawns(&bitboard, &!self.occupied_squares, &self.side_to_move);
+        let mut double_pushed_pawns = push_pawns(&pushed_pawns, &!self.occupied_squares, &self.side_to_move);
+
+        while pushed_pawns != 0 {
+            let square = pushed_pawns.pop_lsb();
+            moves.push(Move::new((square as i32 - up.value()) as u32, square));
+        }
+        while double_pushed_pawns != 0 {
+            let square = double_pushed_pawns.pop_lsb();
+            moves.push(Move::new((square as i32 - up.value() * 2) as u32, square));
+        }
+        let mut capturing_pawns_up_left = bitboard.shift(up_left) & self.enemy_squares();
+        let mut capturing_pawns_up_right = bitboard.shift(up_right) & self.enemy_squares();
+
+        while capturing_pawns_up_left != 0 {
+            let square = capturing_pawns_up_left.pop_lsb();
+            moves.push(Move::new((square as i32 - up_left.value()) as u32, square));
+        }
+        while capturing_pawns_up_right != 0 {
+            let square = capturing_pawns_up_right.pop_lsb();
+            moves.push(Move::new((square as i32 - up_right.value()) as u32, square));
         }
     }
-    moves
-}
-pub fn generate_king_moves(board: &Board) -> Vec<Move> {
-    let mut moves = Vec::<Move>::new();
-    let mut bitboard = board.piece_bitboards.get(&Piece::new(PieceType::King, board.side_to_move)).unwrap().clone();
 
-    while bitboard != 0 {
-        let square = bitboard.pop_lsb();
-        let mut attack_bitboard = KING_ATTACK_MASKS[square as usize].clone() & !board.friendly_squares();
-        while attack_bitboard != 0 {
-            let end_square = attack_bitboard.pop_lsb();
-            moves.push(Move::new(square, end_square));
+    pub fn generate_knight_moves(&self, moves: &mut Vec<Move>) {
+        let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::Knight, &self.side_to_move)];
+
+        while bitboard != 0 {
+            let square = bitboard.pop_lsb();
+            let mut attack_bitboard = KNIGHT_ATTACK_MASKS[square as usize].clone() & !self.friendly_squares();
+            while attack_bitboard != 0 {
+                let end_square = attack_bitboard.pop_lsb();
+                moves.push(Move::new(square, end_square));
+            }
         }
     }
-    moves
-}
-pub fn generate_bishop_moves(board: &Board) -> Vec<Move> {
-    let mut moves = Vec::<Move>::new();
-    let mut bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Bishop, board.side_to_move)).unwrap().clone();
+    pub fn generate_bishop_moves(&self, moves: &mut Vec<Move>) {
+        let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::Bishop, &self.side_to_move)];
 
-    while bitboard != 0 {
-        let square = bitboard.pop_lsb();
-        let mut attack_bitboard = get_bishop_attacks(&(square as usize), &board.occupied_squares);
-        while attack_bitboard != 0 {
-            let end_square = attack_bitboard.pop_lsb();
-            moves.push(Move::new(square, end_square));
+        while bitboard != 0 {
+            let square = bitboard.pop_lsb();
+            let mut attack_bitboard = get_bishop_attacks(&(square as usize), &self.occupied_squares) & !self.friendly_squares();
+            while attack_bitboard != 0 {
+                let end_square = attack_bitboard.pop_lsb();
+                moves.push(Move::new(square, end_square));
+            }
         }
     }
-    moves
-}
-pub fn generate_rook_moves(board: &Board) -> Vec<Move> {
-    let mut moves = Vec::<Move>::new();
-    let mut bitboard = board.piece_bitboards.get(&Piece::new(PieceType::Rook, board.side_to_move)).unwrap().clone();
+    pub fn generate_rook_moves(&self, moves: &mut Vec<Move>) {
+        let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::Rook, &self.side_to_move)];
 
-    while bitboard != 0 {
-        let square = bitboard.pop_lsb();
-        let mut attack_bitboard = get_rook_attacks(&(square as usize), &board.occupied_squares);
-        while attack_bitboard != 0 {
-            let end_square = attack_bitboard.pop_lsb();
-            moves.push(Move::new(square, end_square));
+        while bitboard != 0 {
+            let square = bitboard.pop_lsb();
+            let mut attack_bitboard = get_rook_attacks(&(square as usize), &self.occupied_squares) & !self.friendly_squares();
+            while attack_bitboard != 0 {
+                let end_square = attack_bitboard.pop_lsb();
+                moves.push(Move::new(square, end_square));
+            }
         }
     }
-    moves
+    pub fn generate_queen_moves(&self, moves: &mut Vec<Move>) {
+        let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::Queen, &self.side_to_move)];
+
+        while bitboard != 0 {
+            let square = bitboard.pop_lsb();
+            let mut attack_bitboard =
+                (get_rook_attacks(&(square as usize), &self.occupied_squares) | get_bishop_attacks(&(square as usize), &self.occupied_squares)) & !self.friendly_squares();
+            while attack_bitboard != 0 {
+                let end_square = attack_bitboard.pop_lsb();
+                moves.push(Move::new(square, end_square));
+            }
+        }
+    }
+    pub fn generate_king_moves(&self, moves: &mut Vec<Move>) {
+        let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::King, &self.side_to_move)];
+
+        while bitboard != 0 {
+            let square = bitboard.pop_lsb();
+            let mut attack_bitboard = KING_ATTACK_MASKS[square as usize].clone() & !self.friendly_squares();
+            while attack_bitboard != 0 {
+                let end_square = attack_bitboard.pop_lsb();
+                moves.push(Move::new(square, end_square));
+            }
+        }
+    }
 }
-//pub fn generate_queen_moves(board: &Board) -> Vec<Move> {}
-//pub fn generate_king_moves(board: &Board) -> Vec<Move> {}
+use crate::board::Board;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::board::Board;
 
     #[test]
     fn generates_correct_pawn_moves() {
         let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
-        let moves = generate_pawn_moves(&board);
+        let mut moves = Vec::<Move>::new();
+        board.generate_pawn_moves(&mut moves);
         assert_eq!(moves.len(), 16);
     }
     #[test]
     fn generates_correct_knight_moves() {
         let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
-        let moves = generate_knight_moves(&board);
+        let mut moves = Vec::<Move>::new();
+        board.generate_knight_moves(&mut moves);
         assert_eq!(moves.len(), 4);
     }
 }
