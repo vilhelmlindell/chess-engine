@@ -1,25 +1,30 @@
 use std::io;
 use std::thread;
 
-fn main() {
-    let thread = thread::spawn(|| start());
+//fn main() {
+//    let thread = thread::spawn(|| start());
+//}
+
+struct UCIEngine {
+    name: String,
+    author: String,
+    debug: bool,
 }
 
-struct UCIEngine {}
-
-fn start() {
-    loop {
-        let command = String::new();
-        io::stdin().read_line(&mut command);
-        handle_command(&command);
-    }
-}
+//pub fn start() {
+//    loop {
+//        let command = String::new();
+//        io::stdin().read_line(&mut command);
+//        handle_command(&command);
+//    }
+//}
 
 fn handle_command(command: &String) {
     if command.starts_with("uci") {
         start_engine();
     } else if command.starts_with("debug") {
     } else if command.starts_with("isready") {
+        synchronize();
     } else if command.starts_with("setoption name") {
     } else if command.starts_with("register") {
     } else if command.starts_with("ucinewgame") {
@@ -30,6 +35,12 @@ fn handle_command(command: &String) {
     } else if command.starts_with("quit") {
     }
 }
-fn send_command(command: &String) {}
 
-fn start_engine() {}
+fn start_engine() {
+    println!("id name chess_engine");
+    println!("id name vilhelm lindell");
+    println!("uciok");
+}
+fn synchronize() {
+    println!("readyok");
+}

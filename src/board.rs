@@ -1,6 +1,7 @@
 use crate::bitboard::Bitboard;
 use crate::piece::{Piece, PieceType};
 use crate::r#move::CastlingRights;
+use crate::tables::*;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
@@ -12,7 +13,7 @@ pub struct Board {
     pub occupied_squares: Bitboard,
     pub side_bitboards: [Bitboard; 2],
     pub piece_bitboards: [Bitboard; 12],
-    pub castlings_rights: [CastlingRights; 2],
+    //pub castlings_rights: [CastlingRights; 2],
 }
 
 impl Board {
@@ -90,6 +91,33 @@ impl Board {
                 self.occupied_squares.clear_bit(&square);
             }
         }
+    }
+    pub fn is_attacked(&self, square: u32) -> bool {
+        let pawns = self.piece_bitboards[Piece::new(&PieceType::Pawn, &self.side_to_move)];
+        if (PAWN_ATTACKS[self.side_to_move.enemy()][square as usize] & pawns).0 != 0 {
+            return true;
+        }
+        let knights = self.piece_bitboards[Piece::new(&PieceType::Knight, &self.side_to_move)];
+        if (KNIGHT_ATTACK_MASKS[square as usize] & knights).0 != 0 {
+            return true;
+        }
+        let bishops = self.piece_bitboards[Piece::new(&PieceType::Bishop, &self.side_to_move)];
+        if (get_bishop_attacks(&(square as usize), &self.occupied_squares) & bishops).0 != 0 {
+            return true;
+        }
+        let rooks = self.piece_bitboards[Piece::new(&PieceType::Rook, &self.side_to_move)];
+        if (get_rook_attacks(&(square as usize), &self.occupied_squares) & rooks).0 != 0 {
+            return true;
+        }
+        let queens = self.piece_bitboards[Piece::new(&PieceType::Queen, &self.side_to_move)];
+        if (get_queen_attacks(&(square as usize), &self.occupied_squares) & queens).0 != 0 {
+            return true;
+        }
+        let king = self.piece_bitboards[Piece::new(&PieceType::King, &self.side_to_move)];
+        if (KING_ATTACK_MASKS[square as usize] & king).0 != 0 {
+            return true;
+        }
+        false
     }
     pub fn make_move(&self) {}
     pub fn unmake_move(&self) {}

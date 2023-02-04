@@ -6,6 +6,7 @@ mod magic_numbers;
 mod r#move;
 mod move_generation;
 mod piece;
+mod search;
 mod tables;
 mod uci;
 

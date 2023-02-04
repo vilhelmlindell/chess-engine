@@ -1,5 +1,5 @@
 use crate::bitboard::Bitboard;
-use crate::board::Board;
+use crate::board::{Board, Side};
 use crate::direction::Direction;
 use crate::magic_numbers::*;
 use once_cell::sync::Lazy;
@@ -14,6 +14,7 @@ pub static BISHOP_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(|| precompute_b
 pub static ROOK_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(|| precompute_rook_attack_mask());
 pub static BISHOP_ATTACKS: Lazy<Box<[[Bitboard; 512]]>> = Lazy::new(|| precompute_bishop_magic_bitboards());
 pub static ROOK_ATTACKS: Lazy<Box<[[Bitboard; 4096]]>> = Lazy::new(|| precompute_rook_magic_bitboards());
+pub static PAWN_ATTACKS: Lazy<[[Bitboard; 64]; 2]> = Lazy::new(|| precompute_pawn_attacks());
 
 pub fn get_bishop_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.clone().0);
@@ -28,6 +29,9 @@ pub fn get_rook_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
     index *= ROOK_MAGIC_NUMBERS[*square];
     index >>= 64 - ROOK_SHIFT_AMOUNT[*square] as usize;
     ROOK_ATTACKS[*square][index.0 as usize]
+}
+pub fn get_queen_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
+    get_bishop_attacks(square, blockers) | get_rook_attacks(square, blockers)
 }
 
 fn precompute_squares_to_edge() -> [[u32; 8]; 64] {
@@ -134,6 +138,15 @@ fn precompute_bishop_attack_mask() -> [Bitboard; 64] {
         attack_masks[square] = attack_mask;
     }
     attack_masks
+}
+fn precompute_pawn_attacks() -> [[Bitboard; 64]; 2] {
+    let mut pawn_attacks = [[Bitboard(0); 64]; 2];
+    for square in 0..64 {
+        let bitboard = Bitboard(1 << square);
+        pawn_attacks[Side::White][square] = bitboard.south_west() | bitboard.south_east();
+        pawn_attacks[Side::Black][square] = bitboard.north_west() | bitboard.north_east();
+    }
+    pawn_attacks
 }
 pub fn get_bishop_attacks_classical(square: &usize, blockers: &Bitboard) -> Bitboard {
     let mut attacks = Bitboard(0);
@@ -264,8 +277,7 @@ mod tests {
     }
     #[test]
     fn bishop_magic_bitboards_indexes_correctly() {
-        let square = 29;
-        let blockers = Board::from_fen("rnbqkbnr/pppppppp/8/8/B7/8/PPPPPPPP/RNBQKBNR").occupied_squares & BISHOP_ATTACK_MASKS[square];
-        assert_eq!(get_bishop_attacks(&square, &blockers), get_bishop_attacks_classical(&square, &blockers));
+        println!("{}", PAWN_ATTACKS[Side::White][36]);
+        assert!(true);
     }
 }

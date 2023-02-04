@@ -10,18 +10,7 @@ fn push_pawns(pawns: &Bitboard, empty_squares: &Bitboard, side_to_move: &Side) -
 }
 
 impl Board {
-    pub fn generate_moves(&self) -> Vec<Move> {
-        let mut moves = Vec::<Move>::with_capacity(218);
-        self.generate_pawn_moves(&mut moves);
-        self.generate_knight_moves(&mut moves);
-        self.generate_bishop_moves(&mut moves);
-        self.generate_rook_moves(&mut moves);
-        self.generate_queen_moves(&mut moves);
-        self.generate_king_moves(&mut moves);
-        moves
-    }
-
-    pub fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
+    fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
         let up: &Direction = match self.side_to_move {
             Side::White => &Direction::North,
             Side::Black => &Direction::South,
@@ -59,8 +48,7 @@ impl Board {
             moves.push(Move::new((square as i32 - up_right.value()) as u32, square));
         }
     }
-
-    pub fn generate_knight_moves(&self, moves: &mut Vec<Move>) {
+    fn generate_knight_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::Knight, &self.side_to_move)];
 
         while bitboard != 0 {
@@ -72,7 +60,7 @@ impl Board {
             }
         }
     }
-    pub fn generate_bishop_moves(&self, moves: &mut Vec<Move>) {
+    fn generate_bishop_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::Bishop, &self.side_to_move)];
 
         while bitboard != 0 {
@@ -84,7 +72,7 @@ impl Board {
             }
         }
     }
-    pub fn generate_rook_moves(&self, moves: &mut Vec<Move>) {
+    fn generate_rook_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::Rook, &self.side_to_move)];
 
         while bitboard != 0 {
@@ -96,20 +84,19 @@ impl Board {
             }
         }
     }
-    pub fn generate_queen_moves(&self, moves: &mut Vec<Move>) {
+    fn generate_queen_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::Queen, &self.side_to_move)];
 
         while bitboard != 0 {
             let square = bitboard.pop_lsb();
-            let mut attack_bitboard =
-                (get_rook_attacks(&(square as usize), &self.occupied_squares) | get_bishop_attacks(&(square as usize), &self.occupied_squares)) & !self.friendly_squares();
+            let mut attack_bitboard = get_queen_attacks(&(square as usize), &self.occupied_squares) & !self.friendly_squares();
             while attack_bitboard != 0 {
                 let end_square = attack_bitboard.pop_lsb();
                 moves.push(Move::new(square, end_square));
             }
         }
     }
-    pub fn generate_king_moves(&self, moves: &mut Vec<Move>) {
+    fn generate_king_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_bitboards[Piece::new(&PieceType::King, &self.side_to_move)];
 
         while bitboard != 0 {
@@ -122,11 +109,11 @@ impl Board {
         }
     }
 }
-use crate::board::Board;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Board;
 
     #[test]
     fn generates_correct_pawn_moves() {
