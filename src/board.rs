@@ -1,10 +1,18 @@
 use crate::bitboard::Bitboard;
 use crate::piece::{Piece, PieceType};
-use crate::r#move::CastlingRights;
+use crate::piece_move::Move;
 use crate::tables::*;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
+
+#[derive(Clone, Copy)]
+pub enum CastlingRights {
+    None,
+    King,
+    Queen,
+    All,
+}
 
 #[non_exhaustive]
 pub struct Board {
@@ -12,8 +20,9 @@ pub struct Board {
     pub side_to_move: Side,
     pub occupied_squares: Bitboard,
     pub side_bitboards: [Bitboard; 2],
+    pub attacked_squares: [Bitboard; 2],
     pub piece_bitboards: [Bitboard; 12],
-    //pub castlings_rights: [CastlingRights; 2],
+    pub castlings_rights: [CastlingRights; 2],
 }
 
 impl Board {
@@ -30,7 +39,9 @@ impl Board {
             side_to_move: Side::White,
             occupied_squares: Bitboard(0),
             side_bitboards: [Bitboard(0); 2],
+            attacked_squares: [Bitboard(0); 2],
             piece_bitboards: [Bitboard(0); 12],
+            castlings_rights: [CastlingRights::All; 2],
         }
     }
     pub fn from_fen(fen: &str) -> Board {
@@ -119,8 +130,8 @@ impl Board {
         }
         false
     }
-    pub fn make_move(&self) {}
-    pub fn unmake_move(&self) {}
+    pub fn make_move(&self, mov: &Move) {}
+    pub fn unmake_move(&self, mov: &Move) {}
     pub fn update_board_state(&mut self) {}
 }
 
