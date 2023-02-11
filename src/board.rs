@@ -1,10 +1,12 @@
 use crate::bitboard::Bitboard;
 use crate::piece::{Piece, PieceType};
-use crate::piece_move::Move;
+use crate::piece_move::{Move, MoveType};
 use crate::tables::*;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
+
+pub const STARTING_FEN: &'static str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
 
 #[derive(Clone, Copy)]
 pub enum CastlingRights {
@@ -23,6 +25,7 @@ pub struct Board {
     pub attacked_squares: [Bitboard; 2],
     pub piece_bitboards: [Bitboard; 12],
     pub castlings_rights: [CastlingRights; 2],
+    pub en_passant_square: Option<u32>,
 }
 
 impl Board {
@@ -42,7 +45,11 @@ impl Board {
             attacked_squares: [Bitboard(0); 2],
             piece_bitboards: [Bitboard(0); 12],
             castlings_rights: [CastlingRights::All; 2],
+            en_passant_square: None,
         }
+    }
+    pub fn start_pos() -> Board {
+        Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
     }
     pub fn from_fen(fen: &str) -> Board {
         let mut board = Board::new();
@@ -76,7 +83,9 @@ impl Board {
                         self.squares[square] = Some(Piece::new(&piece_types.get(&piece_char).copied().unwrap(), &Side::Black))
                     }
                 }
-                file += 1;
+                if !piece_char.is_numeric() {
+                    file += 1;
+                }
             }
         }
         self.set_bitboards_from_squares();
@@ -104,33 +113,35 @@ impl Board {
         }
     }
     pub fn is_attacked(&self, square: u32) -> bool {
-        let pawns = self.piece_bitboards[Piece::new(&PieceType::Pawn, &self.side_to_move)];
+        let pawns = self.piece_bitboards[Piece::new(&PieceType::Pawn, &self.side_to_move.enemy())];
         if (PAWN_ATTACKS[self.side_to_move.enemy()][square as usize] & pawns).0 != 0 {
             return true;
         }
-        let knights = self.piece_bitboards[Piece::new(&PieceType::Knight, &self.side_to_move)];
+        let knights = self.piece_bitboards[Piece::new(&PieceType::Knight, &self.side_to_move.enemy())];
         if (KNIGHT_ATTACK_MASKS[square as usize] & knights).0 != 0 {
             return true;
         }
-        let bishops = self.piece_bitboards[Piece::new(&PieceType::Bishop, &self.side_to_move)];
+        let bishops = self.piece_bitboards[Piece::new(&PieceType::Bishop, &self.side_to_move.enemy())];
         if (get_bishop_attacks(&(square as usize), &self.occupied_squares) & bishops).0 != 0 {
             return true;
         }
-        let rooks = self.piece_bitboards[Piece::new(&PieceType::Rook, &self.side_to_move)];
+        let rooks = self.piece_bitboards[Piece::new(&PieceType::Rook, &self.side_to_move.enemy())];
         if (get_rook_attacks(&(square as usize), &self.occupied_squares) & rooks).0 != 0 {
             return true;
         }
-        let queens = self.piece_bitboards[Piece::new(&PieceType::Queen, &self.side_to_move)];
+        let queens = self.piece_bitboards[Piece::new(&PieceType::Queen, &self.side_to_move.enemy())];
         if (get_queen_attacks(&(square as usize), &self.occupied_squares) & queens).0 != 0 {
             return true;
         }
-        let king = self.piece_bitboards[Piece::new(&PieceType::King, &self.side_to_move)];
+        let king = self.piece_bitboards[Piece::new(&PieceType::King, &self.side_to_move.enemy())];
         if (KING_ATTACK_MASKS[square as usize] & king).0 != 0 {
             return true;
         }
         false
     }
-    pub fn make_move(&self, mov: &Move) {}
+    pub fn make_move(&self, mov: &Move) {
+        //if mov.move_type = MoveType::Castle {}
+    }
     pub fn unmake_move(&self, mov: &Move) {}
     pub fn update_board_state(&mut self) {}
 }

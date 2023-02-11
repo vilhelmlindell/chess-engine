@@ -8,10 +8,10 @@ use crate::piece_move::Move;
 use crate::piece_move::MoveType;
 use crate::tables::*;
 
-pub const WHITE_QUEENSIDE_CASTLING_MASK: u64 = 0x6000000000000000;
-pub const WHITE_KINGSIDE_CASTLING_MASK: u64 = 0x0E00000000000000;
-pub const BLACK_KINGSIDE_CASTLING_MASK: u64 = 0x0000000000000060;
-pub const BLACK_QUEENSIDE_CASTLING_MASK: u64 = 0x000000000000000E;
+pub const WHITE_KINGSIDE_CASTLING_MASK: Bitboard = Bitboard(0x6000000000000000);
+pub const WHITE_QUEENSIDE_CASTLING_MASK: Bitboard = Bitboard(0x0E00000000000000);
+pub const BLACK_KINGSIDE_CASTLING_MASK: Bitboard = Bitboard(0x0000000000000060);
+pub const BLACK_QUEENSIDE_CASTLING_MASK: Bitboard = Bitboard(0x000000000000000E);
 
 fn push_pawns(pawns: &Bitboard, empty_squares: &Bitboard, side_to_move: &Side) -> Bitboard {
     (pawns.north() >> ((side_to_move.value()) << 4)) & *empty_squares
@@ -28,7 +28,7 @@ impl Board {
         self.generate_king_moves(&mut moves);
         moves
     }
-    fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
+    fn generate_pawn_moves(&mut self, moves: &mut Vec<Move>) {
         let up: &Direction = match self.side_to_move {
             Side::White => &Direction::North,
             Side::Black => &Direction::South,
@@ -43,6 +43,16 @@ impl Board {
         };
         let bitboard = self.piece_bitboards[Piece::new(&PieceType::Pawn, &self.side_to_move)];
 
+        if let Some(end_square) = self.en_passant_square {
+            let mut en_passant_pawns = bitboard & PAWN_ATTACKS[self.side_to_move.enemy()][end_square as usize];
+            while en_passant_pawns != 0 {
+                let square = en_passant_pawns.pop_lsb();
+                moves.push(Move::new(square, end_square, MoveType::EnPassant));
+            }
+        }
+
+        self.en_passant_square = None;
+
         let mut pushed_pawns = push_pawns(&bitboard, &!self.occupied_squares, &self.side_to_move);
         let mut double_pushed_pawns = push_pawns(&pushed_pawns, &!self.occupied_squares, &self.side_to_move);
 
@@ -52,6 +62,7 @@ impl Board {
         }
         while double_pushed_pawns != 0 {
             let square = double_pushed_pawns.pop_lsb();
+            self.en_passant_square = Some((square as i32 - up.value()) as u32);
             moves.push(Move::new((square as i32 - up.value() * 2) as u32, square, MoveType::Normal));
         }
         let mut capturing_pawns_up_left = bitboard.shift(up_left) & self.enemy_squares();
@@ -124,65 +135,40 @@ impl Board {
                 let end_square = attack_bitboard.pop_lsb();
                 moves.push(Move::new(square, end_square, MoveType::Normal));
             }
+            let castling_rights = self.castlings_rights[self.side_to_move];
             match self.side_to_move {
-                Side::White => match self.castlings_rights[self.side_to_move] {
-                    CastlingRights::None => (),
-                    CastlingRights::King => {
-                        if WHITE_KINGSIDE_CASTLING_MASK & self.occupied_squares.0 != 0 || self.is_attacked(60) || self.is_attacked(61) || self.is_attacked(62) {
+                Side::White => {
+                    if let CastlingRights::King | CastlingRights::All = castling_rights {
+                        if WHITE_KINGSIDE_CASTLING_MASK & !self.occupied_squares != WHITE_KINGSIDE_CASTLING_MASK || self.is_attacked(60) || self.is_attacked(61) || self.is_attacked(62) {
                             self.castlings_rights[self.side_to_move] = CastlingRights::None;
                         } else {
                             moves.push(Move::new(60, 62, MoveType::Castle));
                         }
                     }
-                    CastlingRights::Queen => {
-                        if WHITE_QUEENSIDE_CASTLING_MASK & self.occupied_squares.0 != 0 || self.is_attacked(60) || self.is_attacked(59) || self.is_attacked(58) {
+                    if let CastlingRights::Queen | CastlingRights::All = castling_rights {
+                        if WHITE_QUEENSIDE_CASTLING_MASK & !self.occupied_squares != WHITE_QUEENSIDE_CASTLING_MASK || self.is_attacked(60) || self.is_attacked(59) || self.is_attacked(58) {
                             self.castlings_rights[self.side_to_move] = CastlingRights::None;
                         } else {
                             moves.push(Move::new(60, 58, MoveType::Castle));
                         }
                     }
-                    CastlingRights::All => {
-                        if WHITE_KINGSIDE_CASTLING_MASK & self.occupied_squares.0 != 0 || self.is_attacked(60) || self.is_attacked(61) || self.is_attacked(62) {
+                }
+                Side::Black => {
+                    if let CastlingRights::King | CastlingRights::All = castling_rights {
+                        if BLACK_KINGSIDE_CASTLING_MASK & !self.occupied_squares != BLACK_KINGSIDE_CASTLING_MASK || self.is_attacked(4) || self.is_attacked(5) || self.is_attacked(6) {
                             self.castlings_rights[self.side_to_move] = CastlingRights::None;
                         } else {
-                            moves.push(Move::new(60, 62, MoveType::Castle));
-                        }
-                        if WHITE_QUEENSIDE_CASTLING_MASK & self.occupied_squares.0 != 0 || self.is_attacked(60) || self.is_attacked(59) || self.is_attacked(58) {
-                            self.castlings_rights[self.side_to_move] = CastlingRights::None;
-                        } else {
-                            moves.push(Move::new(60, 58, MoveType::Castle));
+                            moves.push(Move::new(4, 6, MoveType::Castle));
                         }
                     }
-                },
-                Side::Black => match self.castlings_rights[self.side_to_move] {
-                    CastlingRights::None => (),
-                    CastlingRights::King => {
-                        if BLACK_KINGSIDE_CASTLING_MASK & self.occupied_squares.0 != 0 || self.is_attacked(4) || self.is_attacked(5) || self.is_attacked(6) {
+                    if let CastlingRights::Queen | CastlingRights::All = castling_rights {
+                        if BLACK_QUEENSIDE_CASTLING_MASK & !self.occupied_squares != BLACK_QUEENSIDE_CASTLING_MASK || self.is_attacked(4) || self.is_attacked(3) || self.is_attacked(2) {
                             self.castlings_rights[self.side_to_move] = CastlingRights::None;
                         } else {
-                            moves.push(Move::new(60, 62, MoveType::Castle));
+                            moves.push(Move::new(4, 2, MoveType::Castle));
                         }
                     }
-                    CastlingRights::Queen => {
-                        if BLACK_QUEENSIDE_CASTLING_MASK & self.occupied_squares.0 != 0 || self.is_attacked(4) || self.is_attacked(3) || self.is_attacked(2) {
-                            self.castlings_rights[self.side_to_move] = CastlingRights::None;
-                        } else {
-                            moves.push(Move::new(60, 62, MoveType::Castle));
-                        }
-                    }
-                    CastlingRights::All => {
-                        if BLACK_KINGSIDE_CASTLING_MASK & self.occupied_squares.0 != 0 || self.is_attacked(4) || self.is_attacked(5) || self.is_attacked(6) {
-                            self.castlings_rights[self.side_to_move] = CastlingRights::None;
-                        } else {
-                            moves.push(Move::new(60, 62, MoveType::Castle));
-                        }
-                        if BLACK_QUEENSIDE_CASTLING_MASK & self.occupied_squares.0 != 0 || self.is_attacked(4) || self.is_attacked(3) || self.is_attacked(2) {
-                            self.castlings_rights[self.side_to_move] = CastlingRights::None;
-                        } else {
-                            moves.push(Move::new(60, 62, MoveType::Castle));
-                        }
-                    }
-                },
+                }
             }
         }
     }
