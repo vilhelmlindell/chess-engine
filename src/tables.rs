@@ -65,7 +65,7 @@ fn precompute_attack_rays() -> [[Bitboard; 8]; 64] {
             let mut attack_ray = Bitboard(0);
             for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] + 1 {
                 let end_square = square as i32 + direction.value() * squares_to_edge as i32;
-                attack_ray.set_bit(&(end_square as u32));
+                attack_ray.set_bit(&(end_square as usize));
             }
             square_attack_rays[direction] = attack_ray;
         }
@@ -90,7 +90,7 @@ fn precompute_knight_attack_masks() -> [Bitboard; 64] {
         for direction in directions {
             let end_square = square + direction;
             if end_square >= 0 && end_square < 64 && i32::abs(square % 8 - end_square % 8) <= 2 {
-                knight_attack_bitboard.set_bit(&(end_square as u32));
+                knight_attack_bitboard.set_bit(&(end_square as usize));
             }
         }
         knight_attack_masks[square as usize] = knight_attack_bitboard;
@@ -104,7 +104,7 @@ fn precompute_king_attack_masks() -> [Bitboard; 64] {
         for direction in Direction::all() {
             let end_square = square + direction.value();
             if end_square >= 0 && end_square < 64 && i32::abs(square % 8 - end_square % 8) <= 2 {
-                king_attack_bitboard.set_bit(&(end_square as u32));
+                king_attack_bitboard.set_bit(&(end_square as usize));
             }
         }
         king_attack_masks[square as usize] = king_attack_bitboard;
@@ -118,7 +118,7 @@ fn precompute_rook_attack_mask() -> [Bitboard; 64] {
         for direction in Direction::orthagonal() {
             for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
                 let end_square = square as i32 + direction.value() * squares_to_edge as i32;
-                attack_mask.set_bit(&(end_square as u32));
+                attack_mask.set_bit(&(end_square as usize));
             }
         }
         attack_masks[square] = attack_mask;
@@ -132,7 +132,7 @@ fn precompute_bishop_attack_mask() -> [Bitboard; 64] {
         for direction in Direction::diagonal() {
             for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
                 let end_square = square as i32 + direction.value() * squares_to_edge as i32;
-                attack_mask.set_bit(&(end_square as u32));
+                attack_mask.set_bit(&(end_square as usize));
             }
         }
         attack_masks[square] = attack_mask;
@@ -153,25 +153,25 @@ pub fn get_bishop_attacks_classical(square: &usize, blockers: &Bitboard) -> Bitb
 
     attacks |= ATTACK_RAYS[*square][Direction::NorthWest];
     if ATTACK_RAYS[*square][Direction::NorthWest] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::NorthWest] & *blockers).msb() as usize;
+        let blocker_index = (ATTACK_RAYS[*square][Direction::NorthWest] & *blockers).msb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::NorthWest];
     }
 
     attacks |= ATTACK_RAYS[*square][Direction::NorthEast];
     if ATTACK_RAYS[*square][Direction::NorthEast] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::NorthEast] & *blockers).msb() as usize;
+        let blocker_index = (ATTACK_RAYS[*square][Direction::NorthEast] & *blockers).msb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::NorthEast];
     }
 
     attacks |= ATTACK_RAYS[*square][Direction::SouthWest];
     if ATTACK_RAYS[*square][Direction::SouthWest] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::SouthWest] & *blockers).lsb() as usize;
+        let blocker_index = (ATTACK_RAYS[*square][Direction::SouthWest] & *blockers).lsb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::SouthWest];
     }
 
     attacks |= ATTACK_RAYS[*square][Direction::SouthEast];
     if ATTACK_RAYS[*square][Direction::SouthEast] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::SouthEast] & *blockers).lsb() as usize;
+        let blocker_index = (ATTACK_RAYS[*square][Direction::SouthEast] & *blockers).lsb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::SouthEast];
     }
 
@@ -182,25 +182,25 @@ pub fn get_rook_attacks_classical(square: &usize, blockers: &Bitboard) -> Bitboa
 
     attacks |= ATTACK_RAYS[*square][Direction::North];
     if ATTACK_RAYS[*square][Direction::North] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::North] & *blockers).msb() as usize;
+        let blocker_index = (ATTACK_RAYS[*square][Direction::North] & *blockers).msb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::North];
     }
 
     attacks |= ATTACK_RAYS[*square][Direction::West];
     if ATTACK_RAYS[*square][Direction::West] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::West] & *blockers).msb() as usize;
+        let blocker_index = (ATTACK_RAYS[*square][Direction::West] & *blockers).msb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::West];
     }
 
     attacks |= ATTACK_RAYS[*square][Direction::South];
     if ATTACK_RAYS[*square][Direction::South] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::South] & *blockers).lsb() as usize;
+        let blocker_index = (ATTACK_RAYS[*square][Direction::South] & *blockers).lsb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::South];
     }
 
     attacks |= ATTACK_RAYS[*square][Direction::East];
     if ATTACK_RAYS[*square][Direction::East] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::East] & *blockers).lsb() as usize;
+        let blocker_index = (ATTACK_RAYS[*square][Direction::East] & *blockers).lsb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::East];
     }
 

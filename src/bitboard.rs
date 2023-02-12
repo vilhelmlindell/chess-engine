@@ -46,27 +46,27 @@ impl Bitboard {
             Direction::SouthEast => self.south_east(),
         }
     }
-    pub fn bit(&self, n: &u32) -> u64 {
+    pub fn bit(&self, n: &usize) -> u64 {
         (self.0 >> n) & 1
     }
-    pub fn set_bit(&mut self, n: &u32) {
+    pub fn set_bit(&mut self, n: &usize) {
         self.0 |= 1 << n;
     }
-    pub fn clear_bit(&mut self, n: &u32) {
+    pub fn clear_bit(&mut self, n: &usize) {
         self.0 &= !(1 << n);
     }
-    pub fn lsb(&self) -> u32 {
-        self.trailing_zeros()
+    pub fn lsb(&self) -> usize {
+        self.trailing_zeros() as usize
     }
-    pub fn msb(&self) -> u32 {
-        63 - self.leading_zeros()
+    pub fn msb(&self) -> usize {
+        63 - self.leading_zeros() as usize
     }
-    pub fn pop_lsb(&mut self) -> u32 {
+    pub fn pop_lsb(&mut self) -> usize {
         let index = self.lsb();
         self.clear_bit(&index);
         index
     }
-    pub fn pop_msb(&mut self) -> u32 {
+    pub fn pop_msb(&mut self) -> usize {
         let index = self.msb();
         self.clear_bit(&index);
         index

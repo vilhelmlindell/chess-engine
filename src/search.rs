@@ -8,7 +8,7 @@ impl Board {
             return self.quiescense_search(alpha, beta);
         }
         for mov in self.generate_moves() {
-            let score = -self.alpha_beta_search(0 - alpha, -beta, depth_left - 1);
+            let score = -self.alpha_beta_search(-beta, -alpha, depth_left - 1);
             if score >= beta {
                 return beta;
             }

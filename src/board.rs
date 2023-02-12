@@ -1,4 +1,5 @@
 use crate::bitboard::Bitboard;
+use crate::direction::Direction;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::{Move, MoveType};
 use crate::tables::*;
@@ -6,14 +7,33 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
-pub const STARTING_FEN: &'static str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+const STARTING_FEN: &'static str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+
+pub const WHITE_KINGSIDE_CASTLING_MASK: Bitboard = Bitboard(0x6000000000000000);
+pub const WHITE_QUEENSIDE_CASTLING_MASK: Bitboard = Bitboard(0x0E00000000000000);
+pub const BLACK_KINGSIDE_CASTLING_MASK: Bitboard = Bitboard(0x0000000000000060);
+pub const BLACK_QUEENSIDE_CASTLING_MASK: Bitboard = Bitboard(0x000000000000000E);
 
 #[derive(Clone, Copy)]
-pub enum CastlingRights {
-    None,
-    King,
-    Queen,
-    All,
+pub struct CastlingRights {
+    pub kingside: bool,
+    pub queenside: bool,
+}
+
+pub struct BoardState {
+    pub castling_rights: [CastlingRights; 2],
+    pub captured_piece: Option<Piece>,
+    pub en_passant_square: Option<usize>,
+}
+
+impl BoardState {
+    pub fn start_pos() -> BoardState {
+        BoardState {
+            castling_rights: [CastlingRights { kingside: false, queenside: false }; 2],
+            captured_piece: None,
+            en_passant_square: None,
+        }
+    }
 }
 
 #[non_exhaustive]
@@ -24,18 +44,11 @@ pub struct Board {
     pub side_bitboards: [Bitboard; 2],
     pub attacked_squares: [Bitboard; 2],
     pub piece_bitboards: [Bitboard; 12],
-    pub castlings_rights: [CastlingRights; 2],
-    pub en_passant_square: Option<u32>,
+    pub state: BoardState,
+    pub previous_state: BoardState,
 }
 
 impl Board {
-    pub fn friendly_squares(&self) -> Bitboard {
-        self.side_bitboards[self.side_to_move.value() as usize]
-    }
-    pub fn enemy_squares(&self) -> Bitboard {
-        self.side_bitboards[self.side_to_move.enemy().value() as usize]
-    }
-
     pub fn new() -> Board {
         Board {
             squares: [Option::<Piece>::None; 64],
@@ -44,12 +57,18 @@ impl Board {
             side_bitboards: [Bitboard(0); 2],
             attacked_squares: [Bitboard(0); 2],
             piece_bitboards: [Bitboard(0); 12],
-            castlings_rights: [CastlingRights::All; 2],
-            en_passant_square: None,
+            state: BoardState::start_pos(),
+            previous_state: BoardState::start_pos(),
         }
     }
+    pub fn friendly_squares(&self) -> Bitboard {
+        self.side_bitboards[self.side_to_move]
+    }
+    pub fn enemy_squares(&self) -> Bitboard {
+        self.side_bitboards[self.side_to_move.enemy()]
+    }
     pub fn start_pos() -> Board {
-        Self::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR")
+        Self::from_fen(STARTING_FEN)
     }
     pub fn from_fen(fen: &str) -> Board {
         let mut board = Board::new();
@@ -74,9 +93,9 @@ impl Board {
                 let piece_char = ranks[rank].as_bytes()[i] as char;
                 if piece_char.is_numeric() {
                     let piece_char: char = ranks[rank].as_bytes()[i] as char;
-                    file += piece_char.to_digit(10).unwrap();
+                    file += piece_char.to_digit(10).unwrap() as usize;
                 } else {
-                    let square = rank * 8 + file as usize;
+                    let square = rank * 8 + file;
                     if piece_char.is_uppercase() {
                         self.squares[square] = Some(Piece::new(&piece_types.get(&piece_char.to_ascii_lowercase()).copied().unwrap(), &Side::White))
                     } else {
@@ -95,13 +114,13 @@ impl Board {
             let mut bitboard = self.piece_bitboards[piece];
             while bitboard != 0 {
                 let square = bitboard.pop_lsb();
-                self.squares[square as usize] = Some(piece);
+                self.squares[square] = Some(piece);
             }
         }
     }
     pub fn set_bitboards_from_squares(&mut self) {
-        for square in 0..64u32 {
-            if let Some(piece) = self.squares[square as usize] {
+        for square in 0..64 {
+            if let Some(piece) = self.squares[square] {
                 self.piece_bitboards[piece].set_bit(&square);
                 self.side_bitboards[piece.side()].set_bit(&square);
                 self.occupied_squares.set_bit(&square);
@@ -112,38 +131,123 @@ impl Board {
             }
         }
     }
-    pub fn is_attacked(&self, square: u32) -> bool {
+    pub fn is_attacked(&self, square: usize) -> bool {
         let pawns = self.piece_bitboards[Piece::new(&PieceType::Pawn, &self.side_to_move.enemy())];
-        if (PAWN_ATTACKS[self.side_to_move.enemy()][square as usize] & pawns).0 != 0 {
+        if (PAWN_ATTACKS[self.side_to_move.enemy()][square] & pawns).0 != 0 {
             return true;
         }
         let knights = self.piece_bitboards[Piece::new(&PieceType::Knight, &self.side_to_move.enemy())];
-        if (KNIGHT_ATTACK_MASKS[square as usize] & knights).0 != 0 {
+        if (KNIGHT_ATTACK_MASKS[square] & knights).0 != 0 {
             return true;
         }
         let bishops = self.piece_bitboards[Piece::new(&PieceType::Bishop, &self.side_to_move.enemy())];
-        if (get_bishop_attacks(&(square as usize), &self.occupied_squares) & bishops).0 != 0 {
+        if (get_bishop_attacks(&square, &self.occupied_squares) & bishops).0 != 0 {
             return true;
         }
         let rooks = self.piece_bitboards[Piece::new(&PieceType::Rook, &self.side_to_move.enemy())];
-        if (get_rook_attacks(&(square as usize), &self.occupied_squares) & rooks).0 != 0 {
+        if (get_rook_attacks(&square, &self.occupied_squares) & rooks).0 != 0 {
             return true;
         }
         let queens = self.piece_bitboards[Piece::new(&PieceType::Queen, &self.side_to_move.enemy())];
-        if (get_queen_attacks(&(square as usize), &self.occupied_squares) & queens).0 != 0 {
+        if (get_queen_attacks(&square, &self.occupied_squares) & queens).0 != 0 {
             return true;
         }
         let king = self.piece_bitboards[Piece::new(&PieceType::King, &self.side_to_move.enemy())];
-        if (KING_ATTACK_MASKS[square as usize] & king).0 != 0 {
+        if (KING_ATTACK_MASKS[square] & king).0 != 0 {
             return true;
         }
         false
     }
-    pub fn make_move(&self, mov: &Move) {
-        //if mov.move_type = MoveType::Castle {}
+    fn move_piece(&mut self, start_square: usize, end_square: usize) {
+        self.occupied_squares.clear_bit(&start_square);
+        self.side_bitboards[self.side_to_move].clear_bit(&start_square);
+        self.piece_bitboards[self.squares[start_square].unwrap()].clear_bit(&start_square);
+
+        if let Some(piece) = self.squares[end_square] {
+            self.occupied_squares.clear_bit(&end_square);
+            self.side_bitboards[self.side_to_move].clear_bit(&end_square);
+            self.piece_bitboards[piece].clear_bit(&end_square);
+            self.state.captured_piece = Some(piece);
+        }
+
+        self.squares[end_square] = self.squares[start_square];
+        self.squares[start_square] = None;
+
+        self.occupied_squares.set_bit(&end_square);
+        self.side_bitboards[self.side_to_move].set_bit(&end_square);
+        self.piece_bitboards[self.squares[end_square].unwrap()].set_bit(&end_square);
     }
-    pub fn unmake_move(&self, mov: &Move) {}
-    pub fn update_board_state(&mut self) {}
+    pub fn make_move(&mut self, mov: &Move) {
+        self.previous_state = self.state;
+        self.move_piece(mov.start_square, mov.end_square);
+        self.state.en_passant_square = None;
+
+        match mov.move_type {
+            MoveType::Normal => {}
+            MoveType::Castle { kingside } => match self.side_to_move {
+                Side::White => {
+                    if kingside {
+                        self.move_piece(63, 61);
+                    } else {
+                        self.move_piece(56, 59);
+                    }
+                }
+                Side::Black => {
+                    if kingside {
+                        self.move_piece(7, 5);
+                    } else {
+                        self.move_piece(0, 3);
+                    }
+                }
+            },
+            MoveType::DoublePush => {
+                let down = match self.side_to_move {
+                    Side::White => Direction::North,
+                    Side::Black => Direction::South,
+                };
+                self.state.en_passant_square = Some((mov.end_square as i32 + down.value()) as usize);
+            }
+            MoveType::Promotion(piece_type) => {
+                let piece = Piece::new(&piece_type, &self.side_to_move);
+                self.piece_bitboards[self.squares[mov.end_square].unwrap()].clear_bit(&mov.end_square);
+                self.piece_bitboards[piece].set_bit(&mov.end_square);
+                self.squares[mov.end_square] = Some(piece);
+            }
+            MoveType::EnPassant => {
+                let down = match self.side_to_move {
+                    Side::White => Direction::North,
+                    Side::Black => Direction::South,
+                };
+                let capture_square = (mov.end_square as i32 + down.value()) as usize;
+                self.occupied_squares.clear_bit(&capture_square);
+                self.side_bitboards[self.side_to_move].clear_bit(&capture_square);
+                self.piece_bitboards[self.squares[capture_square].unwrap()].clear_bit(&capture_square);
+            }
+        }
+        self.state.castling_rights[self.side_to_move.enemy()] = CastlingRights { kingside: false, queenside: false };
+
+        match self.side_to_move.enemy() {
+            Side::White => {
+                if WHITE_KINGSIDE_CASTLING_MASK & !self.occupied_squares == WHITE_KINGSIDE_CASTLING_MASK && !(self.is_attacked(60) || self.is_attacked(61) || self.is_attacked(62)) {
+                    self.state.castling_rights[self.side_to_move].kingside = true
+                }
+                if WHITE_QUEENSIDE_CASTLING_MASK & !self.occupied_squares == WHITE_QUEENSIDE_CASTLING_MASK && !(self.is_attacked(60) || self.is_attacked(59) || self.is_attacked(58)) {
+                    self.state.castling_rights[self.side_to_move].queenside = true;
+                }
+            }
+            Side::Black => {
+                if BLACK_KINGSIDE_CASTLING_MASK & !self.occupied_squares == BLACK_KINGSIDE_CASTLING_MASK && !(self.is_attacked(4) || self.is_attacked(5) || self.is_attacked(6)) {
+                    self.state.castling_rights[self.side_to_move].kingside = true;
+                }
+                if BLACK_QUEENSIDE_CASTLING_MASK & !self.occupied_squares == BLACK_QUEENSIDE_CASTLING_MASK && !(self.is_attacked(4) || self.is_attacked(3) || self.is_attacked(2)) {
+                    self.state.castling_rights[self.side_to_move].queenside = true;
+                }
+            }
+        }
+    }
+    pub fn unmake_move(&mut self, mov: &Move) {
+        self.move_piece(mov.end_square, mov.start_square);
+    }
 }
 
 impl Display for Board {
@@ -157,16 +261,15 @@ impl Display for Board {
             (PieceType::King, 'k'),
         ]);
         for rank in 0..8 {
-            write!(f, "{}", rank + 1).unwrap();
+            write!(f, "{}", 8 - rank).unwrap();
             for file in 0..8 {
                 write!(f, "{}", ' ').unwrap();
                 match self.squares[rank * 8 + file] {
                     Some(piece) => {
                         let piece_char = piece_chars.get(&piece.piece_type()).unwrap();
-                        if piece.side() == Side::White {
-                            write!(f, "{}", piece_char.to_ascii_uppercase()).unwrap();
-                        } else {
-                            write!(f, "{}", piece_char).unwrap();
+                        match piece.side() {
+                            Side::White => write!(f, "{}", piece_char.to_ascii_uppercase()).unwrap(),
+                            Side::Black => write!(f, "{}", piece_char).unwrap(),
                         }
                     }
                     None => write!(f, "{}", '.').unwrap(),

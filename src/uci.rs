@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::thread;
 
 use crate::board::Board;
+use crate::piece_move::Move;
 
 pub struct SearchOption {
     depth: u32,
@@ -11,9 +12,9 @@ pub struct SearchOption {
 }
 
 pub struct UCI {
-    name: Option<String>,
-    author: Option<String>,
-    search_option: SearchOption,
+    name: String,
+    author: String,
+    board: Board,
     is_debug: bool,
     is_running: bool,
 }
@@ -21,9 +22,9 @@ pub struct UCI {
 impl UCI {
     pub fn start() {
         let mut uci = UCI {
-            name: None,
-            author: None,
-            search_option: SearchOption { depth: 5, infinite: true },
+            name: "".to_string(),
+            author: "".to_string(),
+            board: Board::start_pos(),
             is_debug: false,
             is_running: true,
         };
@@ -37,7 +38,7 @@ impl UCI {
         self.parse_command(&mut command);
     }
     fn parse_command(&mut self, full_command: &String) {
-        let command = full_command.split_once(" ").unwrap().0;
+        let command = full_command.split_whitespace().collect::<Vec<&str>>()[0];
         match command {
             "uci" => self.identify(),
             "debug" => self.set_debug(full_command),
@@ -49,7 +50,7 @@ impl UCI {
             "go" => self.go(full_command),
             //"stop" => self.stop(),
             //"ponderhit" => ,
-            //"quit" => self.quit(),
+            "quit" => self.quit(),
             _ => {}
         }
     }
@@ -78,7 +79,7 @@ impl UCI {
     fn synchronize(&self) {
         println!("readyok");
     }
-    fn set_position(&self, command: &String) {
+    fn set_position(&mut self, command: &String) {
         let words: Vec<&str> = command.split_whitespace().collect();
         let mut moves_index = 8;
         let mut board = {
@@ -92,34 +93,61 @@ impl UCI {
                 return;
             }
         };
-        if words[moves_index] == "moves" {
-            let moves = &words[moves_index + 1..];
+        if let Some(move_string) = words.get(moves_index) {
+            if move_string != &"moves" {
+                return;
+            }
+            let moves = &words[(moves_index + 1)..];
             for mov in moves {
                 let all_moves = board.generate_moves();
                 all_moves.iter().enumerate().for_each(|(i, val)| {
                     if val.to_string() == mov.to_string() {
+                        println!("banana");
                         board.make_move(&all_moves[i])
                     }
                 })
             }
         }
+        self.board = board;
     }
     fn go(&mut self, command: &String) {
+        let mut search_option = SearchOption { depth: 4, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
         while let Some(token) = words.next() {
             match token {
-                "infinite" => self.search_option.infinite = true,
+                "infinite" => search_option.infinite = true,
                 "depth" => {
                     if let Some(depth_string) = words.next() {
                         if let Ok(depth) = depth_string.parse::<u32>() {
-                            self.search_option.depth = depth
+                            search_option.depth = depth
                         }
                     }
                 }
                 _ => {}
             }
         }
+        let best_move = self.search(search_option);
+        println!("bestmove {best_move}");
+    }
+    fn search(&mut self, search_option: SearchOption) -> Move {
+        let mut highest_score = i32::MIN;
+        let mut best_move: Option<Move> = None;
+        for mov in self.board.generate_moves() {
+            self.board.make_move(&mov);
+            let score = self.board.alpha_beta_search(i32::MIN + 1, i32::MAX, search_option.depth);
+            self.board.unmake_move(&mov);
+
+            if score > highest_score {
+                highest_score = score;
+                best_move = Some(mov);
+            }
+        }
+        best_move.unwrap()
+    }
+    fn ponder(&self) {}
+    fn quit(&mut self) {
+        self.is_running = false;
     }
 }
 

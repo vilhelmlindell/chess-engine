@@ -13,4 +13,6 @@ mod uci;
 use board::Board;
 use uci::UCI;
 
-fn main() {}
+fn main() {
+    UCI::start();
+}
