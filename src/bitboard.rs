@@ -82,7 +82,7 @@ impl Display for Bitboard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for rank in 0..8 {
             for file in 0..8 {
-                write!(f, " {}", self.bit(&(rank * 8 + file)).to_string()).unwrap();
+                write!(f, " {}", self.bit(&(rank * 8 + file))).unwrap();
             }
             writeln!(f).unwrap();
         }
@@ -97,8 +97,6 @@ impl PartialEq<u64> for Bitboard {
 
 #[cfg(test)]
 mod tests {
-    use crate::board::Board;
-
     use super::*;
     #[test]
     fn shifts_bits_correctly() {

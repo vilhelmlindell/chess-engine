@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
-const STARTING_FEN: &'static str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
 
 pub const WHITE_KINGSIDE_CASTLING_MASK: Bitboard = Bitboard(0x6000000000000000);
 pub const WHITE_QUEENSIDE_CASTLING_MASK: Bitboard = Bitboard(0x0E00000000000000);
@@ -20,6 +20,7 @@ pub struct CastlingRights {
     pub queenside: bool,
 }
 
+#[derive(Clone, Copy)]
 pub struct BoardState {
     pub castling_rights: [CastlingRights; 2],
     pub captured_piece: Option<Piece>,
@@ -74,6 +75,7 @@ impl Board {
         let mut board = Board::new();
         board.load_fen(fen);
         board.set_bitboards_from_squares();
+        board.update_state();
         board
     }
 
@@ -87,10 +89,10 @@ impl Board {
             ('k', PieceType::King),
         ]);
         let ranks: Vec<&str> = fen.split('/').collect();
-        for rank in 0..ranks.len() {
+        for (rank, rank_string) in ranks.iter().enumerate() {
             let mut file = 0;
-            for i in 0..ranks[rank].len() {
-                let piece_char = ranks[rank].as_bytes()[i] as char;
+            for i in 0..rank_string.len() {
+                let piece_char = rank_string.as_bytes()[i] as char;
                 if piece_char.is_numeric() {
                     let piece_char: char = ranks[rank].as_bytes()[i] as char;
                     file += piece_char.to_digit(10).unwrap() as usize;
@@ -158,45 +160,67 @@ impl Board {
         }
         false
     }
-    fn move_piece(&mut self, start_square: usize, end_square: usize) {
-        self.occupied_squares.clear_bit(&start_square);
-        self.side_bitboards[self.side_to_move].clear_bit(&start_square);
-        self.piece_bitboards[self.squares[start_square].unwrap()].clear_bit(&start_square);
-
-        if let Some(piece) = self.squares[end_square] {
-            self.occupied_squares.clear_bit(&end_square);
-            self.side_bitboards[self.side_to_move].clear_bit(&end_square);
-            self.piece_bitboards[piece].clear_bit(&end_square);
-            self.state.captured_piece = Some(piece);
+    fn clear_square(&mut self, square: &usize) {
+        self.occupied_squares.clear_bit(square);
+        self.side_bitboards[self.squares[*square].unwrap().side()].clear_bit(square);
+        self.piece_bitboards[self.squares[*square].unwrap()].clear_bit(square);
+        self.squares[*square] = None;
+    }
+    fn set_square(&mut self, square: &usize, piece: &Piece) {
+        self.occupied_squares.set_bit(square);
+        if let Some(captured_piece) = self.squares[*square] {
+            self.piece_bitboards[captured_piece].clear_bit(square);
+            self.side_bitboards[captured_piece.side()].clear_bit(square);
+            self.state.captured_piece = Some(captured_piece);
         }
+        self.side_bitboards[piece.side()].set_bit(square);
+        self.piece_bitboards[*piece].set_bit(square);
+        self.squares[*square] = Some(*piece);
+    }
+    fn move_piece(&mut self, start_square: &usize, end_square: &usize) {
+        self.set_square(end_square, &self.squares[*start_square].unwrap());
+        self.clear_square(start_square);
+    }
+    fn update_state(&mut self) {
+        self.state.castling_rights[self.side_to_move.enemy()] = CastlingRights { kingside: false, queenside: false };
 
-        self.squares[end_square] = self.squares[start_square];
-        self.squares[start_square] = None;
-
-        self.occupied_squares.set_bit(&end_square);
-        self.side_bitboards[self.side_to_move].set_bit(&end_square);
-        self.piece_bitboards[self.squares[end_square].unwrap()].set_bit(&end_square);
+        match self.side_to_move.enemy() {
+            Side::White => {
+                self.state.castling_rights[self.side_to_move].kingside =
+                    WHITE_KINGSIDE_CASTLING_MASK & !self.occupied_squares == WHITE_KINGSIDE_CASTLING_MASK && !(self.is_attacked(60) || self.is_attacked(61) || self.is_attacked(62));
+                self.state.castling_rights[self.side_to_move].queenside =
+                    WHITE_QUEENSIDE_CASTLING_MASK & !self.occupied_squares == WHITE_QUEENSIDE_CASTLING_MASK && !(self.is_attacked(60) || self.is_attacked(59) || self.is_attacked(58))
+            }
+            Side::Black => {
+                self.state.castling_rights[self.side_to_move].kingside =
+                    BLACK_KINGSIDE_CASTLING_MASK & !self.occupied_squares == BLACK_KINGSIDE_CASTLING_MASK && !(self.is_attacked(4) || self.is_attacked(5) || self.is_attacked(6));
+                self.state.castling_rights[self.side_to_move].queenside =
+                    BLACK_QUEENSIDE_CASTLING_MASK & !self.occupied_squares == BLACK_QUEENSIDE_CASTLING_MASK && !(self.is_attacked(4) || self.is_attacked(3) || self.is_attacked(2));
+            }
+        }
+        self.previous_state = self.state;
     }
     pub fn make_move(&mut self, mov: &Move) {
-        self.previous_state = self.state;
-        self.move_piece(mov.start_square, mov.end_square);
+        self.move_piece(&mov.start_square, &mov.end_square);
+
         self.state.en_passant_square = None;
+        self.state.captured_piece = None;
 
         match mov.move_type {
             MoveType::Normal => {}
             MoveType::Castle { kingside } => match self.side_to_move {
                 Side::White => {
                     if kingside {
-                        self.move_piece(63, 61);
+                        self.move_piece(&63, &61);
                     } else {
-                        self.move_piece(56, 59);
+                        self.move_piece(&56, &59);
                     }
                 }
                 Side::Black => {
                     if kingside {
-                        self.move_piece(7, 5);
+                        self.move_piece(&7, &5);
                     } else {
-                        self.move_piece(0, 3);
+                        self.move_piece(&0, &3);
                     }
                 }
             },
@@ -209,44 +233,45 @@ impl Board {
             }
             MoveType::Promotion(piece_type) => {
                 let piece = Piece::new(&piece_type, &self.side_to_move);
-                self.piece_bitboards[self.squares[mov.end_square].unwrap()].clear_bit(&mov.end_square);
-                self.piece_bitboards[piece].set_bit(&mov.end_square);
-                self.squares[mov.end_square] = Some(piece);
+                self.set_square(&mov.end_square, &piece);
             }
             MoveType::EnPassant => {
-                let down = match self.side_to_move {
-                    Side::White => Direction::North,
-                    Side::Black => Direction::South,
-                };
-                let capture_square = (mov.end_square as i32 + down.value()) as usize;
-                self.occupied_squares.clear_bit(&capture_square);
-                self.side_bitboards[self.side_to_move].clear_bit(&capture_square);
-                self.piece_bitboards[self.squares[capture_square].unwrap()].clear_bit(&capture_square);
+                self.state.captured_piece = self.squares[self.previous_state.en_passant_square.unwrap()];
+                self.clear_square(&self.previous_state.en_passant_square.unwrap())
             }
         }
-        self.state.castling_rights[self.side_to_move.enemy()] = CastlingRights { kingside: false, queenside: false };
-
-        match self.side_to_move.enemy() {
-            Side::White => {
-                if WHITE_KINGSIDE_CASTLING_MASK & !self.occupied_squares == WHITE_KINGSIDE_CASTLING_MASK && !(self.is_attacked(60) || self.is_attacked(61) || self.is_attacked(62)) {
-                    self.state.castling_rights[self.side_to_move].kingside = true
-                }
-                if WHITE_QUEENSIDE_CASTLING_MASK & !self.occupied_squares == WHITE_QUEENSIDE_CASTLING_MASK && !(self.is_attacked(60) || self.is_attacked(59) || self.is_attacked(58)) {
-                    self.state.castling_rights[self.side_to_move].queenside = true;
-                }
-            }
-            Side::Black => {
-                if BLACK_KINGSIDE_CASTLING_MASK & !self.occupied_squares == BLACK_KINGSIDE_CASTLING_MASK && !(self.is_attacked(4) || self.is_attacked(5) || self.is_attacked(6)) {
-                    self.state.castling_rights[self.side_to_move].kingside = true;
-                }
-                if BLACK_QUEENSIDE_CASTLING_MASK & !self.occupied_squares == BLACK_QUEENSIDE_CASTLING_MASK && !(self.is_attacked(4) || self.is_attacked(3) || self.is_attacked(2)) {
-                    self.state.castling_rights[self.side_to_move].queenside = true;
-                }
-            }
-        }
+        self.update_state();
     }
     pub fn unmake_move(&mut self, mov: &Move) {
-        self.move_piece(mov.end_square, mov.start_square);
+        self.move_piece(&mov.end_square, &mov.start_square);
+        if let Some(piece) = self.state.captured_piece {
+            self.set_square(&mov.end_square, &piece);
+        }
+        match mov.move_type {
+            MoveType::Normal => {}
+            MoveType::Castle { kingside } => match self.side_to_move {
+                Side::White => {
+                    if kingside {
+                        self.move_piece(&61, &63);
+                    } else {
+                        self.move_piece(&59, &56);
+                    }
+                }
+                Side::Black => {
+                    if kingside {
+                        self.move_piece(&5, &7);
+                    } else {
+                        self.move_piece(&3, &0);
+                    }
+                }
+            },
+            MoveType::DoublePush => {}
+            MoveType::Promotion(_) => {
+                self.set_square(&mov.start_square, &Piece::new(&PieceType::Pawn, &self.side_to_move.enemy()));
+            }
+            MoveType::EnPassant => self.set_square(&self.state.en_passant_square.unwrap(), &self.state.captured_piece.unwrap()),
+        }
+        self.state = self.previous_state;
     }
 }
 

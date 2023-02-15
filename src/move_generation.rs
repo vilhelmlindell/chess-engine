@@ -77,7 +77,7 @@ impl Board {
 
         while bitboard != 0 {
             let start_square = bitboard.pop_lsb();
-            let mut attack_bitboard = KNIGHT_ATTACK_MASKS[start_square].clone() & !self.friendly_squares();
+            let mut attack_bitboard = KNIGHT_ATTACK_MASKS[start_square] & !self.friendly_squares();
             while attack_bitboard != 0 {
                 let end_square = attack_bitboard.pop_lsb();
                 moves.push(Move::new(start_square, end_square, MoveType::Normal));
@@ -125,7 +125,7 @@ impl Board {
 
         while bitboard != 0 {
             let start_square = bitboard.pop_lsb();
-            let mut attack_bitboard = KING_ATTACK_MASKS[start_square].clone() & !self.friendly_squares();
+            let mut attack_bitboard = KING_ATTACK_MASKS[start_square] & !self.friendly_squares();
             while attack_bitboard != 0 {
                 let end_square = attack_bitboard.pop_lsb();
                 moves.push(Move::new(start_square, end_square, MoveType::Normal));
@@ -134,14 +134,16 @@ impl Board {
                 Side::White => {
                     if self.state.castling_rights[self.side_to_move].kingside {
                         moves.push(Move::new(60, 62, MoveType::Castle { kingside: true }));
-                    } else if self.state.castling_rights[self.side_to_move].queenside {
+                    }
+                    if self.state.castling_rights[self.side_to_move].queenside {
                         moves.push(Move::new(60, 58, MoveType::Castle { kingside: false }));
                     }
                 }
                 Side::Black => {
                     if self.state.castling_rights[self.side_to_move].kingside {
                         moves.push(Move::new(4, 6, MoveType::Castle { kingside: true }));
-                    } else if self.state.castling_rights[self.side_to_move].queenside {
+                    }
+                    if self.state.castling_rights[self.side_to_move].queenside {
                         moves.push(Move::new(4, 2, MoveType::Castle { kingside: false }));
                     }
                 }

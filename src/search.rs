@@ -27,7 +27,7 @@ impl Board {
             alpha = stand_pat;
         }
         for mov in self.generate_moves() {
-            if mov.captured_piece != None {
+            if self.state.captured_piece != None {
                 self.make_move(&mov);
                 let score = -self.quiescense_search(-beta, -alpha);
                 self.unmake_move(&mov);

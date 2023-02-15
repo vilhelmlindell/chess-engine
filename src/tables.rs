@@ -1,30 +1,30 @@
 use crate::bitboard::Bitboard;
-use crate::board::{Board, Side};
+use crate::board::Side;
 use crate::direction::Direction;
 use crate::magic_numbers::*;
 use once_cell::sync::Lazy;
 use std::cmp::min;
 use std::num::Wrapping;
 
-pub static SQUARES_TO_EDGE: Lazy<[[u32; 8]; 64]> = Lazy::new(|| precompute_squares_to_edge());
-pub static ATTACK_RAYS: Lazy<[[Bitboard; 8]; 64]> = Lazy::new(|| precompute_attack_rays());
-pub static KNIGHT_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(|| precompute_knight_attack_masks());
-pub static KING_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(|| precompute_king_attack_masks());
-pub static BISHOP_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(|| precompute_bishop_attack_mask());
-pub static ROOK_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(|| precompute_rook_attack_mask());
-pub static BISHOP_ATTACKS: Lazy<Box<[[Bitboard; 512]]>> = Lazy::new(|| precompute_bishop_magic_bitboards());
-pub static ROOK_ATTACKS: Lazy<Box<[[Bitboard; 4096]]>> = Lazy::new(|| precompute_rook_magic_bitboards());
-pub static PAWN_ATTACKS: Lazy<[[Bitboard; 64]; 2]> = Lazy::new(|| precompute_pawn_attacks());
+pub static SQUARES_TO_EDGE: Lazy<[[u32; 8]; 64]> = Lazy::new(precompute_squares_to_edge);
+pub static ATTACK_RAYS: Lazy<[[Bitboard; 8]; 64]> = Lazy::new(precompute_attack_rays);
+pub static KNIGHT_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(precompute_knight_attack_masks);
+pub static KING_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(precompute_king_attack_masks);
+pub static BISHOP_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(precompute_bishop_attack_mask);
+pub static ROOK_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(precompute_rook_attack_mask);
+pub static BISHOP_ATTACKS: Lazy<Box<[[Bitboard; 512]]>> = Lazy::new(precompute_bishop_magic_bitboards);
+pub static ROOK_ATTACKS: Lazy<Box<[[Bitboard; 4096]]>> = Lazy::new(precompute_rook_magic_bitboards);
+pub static PAWN_ATTACKS: Lazy<[[Bitboard; 64]; 2]> = Lazy::new(precompute_pawn_attacks);
 
 pub fn get_bishop_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
-    let mut index = Wrapping(blockers.clone().0);
+    let mut index = Wrapping(blockers.0);
     index &= BISHOP_ATTACK_MASKS[*square].0;
     index *= BISHOP_MAGIC_NUMBERS[*square];
     index >>= 64 - BISHOP_SHIFT_AMOUNT[*square] as usize;
     BISHOP_ATTACKS[*square][index.0 as usize]
 }
 pub fn get_rook_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
-    let mut index = Wrapping(blockers.clone().0);
+    let mut index = Wrapping(blockers.0);
     index &= ROOK_ATTACK_MASKS[*square].0;
     index *= ROOK_MAGIC_NUMBERS[*square];
     index >>= 64 - ROOK_SHIFT_AMOUNT[*square] as usize;
@@ -89,7 +89,7 @@ fn precompute_knight_attack_masks() -> [Bitboard; 64] {
         let mut knight_attack_bitboard = Bitboard(0);
         for direction in directions {
             let end_square = square + direction;
-            if end_square >= 0 && end_square < 64 && i32::abs(square % 8 - end_square % 8) <= 2 {
+            if (0..64).contains(&end_square) && i32::abs(square % 8 - end_square % 8) <= 2 {
                 knight_attack_bitboard.set_bit(&(end_square as usize));
             }
         }
@@ -103,7 +103,7 @@ fn precompute_king_attack_masks() -> [Bitboard; 64] {
         let mut king_attack_bitboard = Bitboard(0);
         for direction in Direction::all() {
             let end_square = square + direction.value();
-            if end_square >= 0 && end_square < 64 && i32::abs(square % 8 - end_square % 8) <= 2 {
+            if (0..64).contains(&end_square) && i32::abs(square % 8 - end_square % 8) <= 2 {
                 king_attack_bitboard.set_bit(&(end_square as usize));
             }
         }
