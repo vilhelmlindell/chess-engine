@@ -1,6 +1,6 @@
-use crate::piece::Piece;
-use eframe::{App, CreationContext, Frame};
-use egui::{CentralPanel, Context, TextureHandle, TextureOptions};
+use crate::{board::Board, piece::Piece};
+use eframe::{App, CreationContext};
+use egui::{CentralPanel, Context, Image, TextureHandle, TextureOptions, Vec2};
 use std::env;
 
 fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, image::ImageError> {
@@ -14,6 +14,8 @@ fn load_image_from_path(path: &std::path::Path) -> Result<egui::ColorImage, imag
 pub struct ChessApp {
     board_texture: TextureHandle,
     piece_textures: [TextureHandle; 12],
+    board: Board,
+    scale: f32,
 }
 
 impl ChessApp {
@@ -43,14 +45,30 @@ impl ChessApp {
             load_texture_from_name("bk.png"),
         ];
 
-        Self { board_texture, piece_textures }
+        let board = Board::start_pos();
+
+        Self { board_texture, piece_textures, board }
     }
 }
 
 impl App for ChessApp {
-    fn update(&mut self, ctx: &Context, frame: &mut Frame) {
-        CentralPanel::default().show(ctx, |ui| {
-            ui.image(self.board_texture.id(), self.board_texture.size_vec2() / 2.0);
+    fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+        CentralPanel::default().frame(egui::Frame::none()).show(ctx, |ui| {
+            ui.image(self.board_texture.id(), self.board_texture.size_vec2());
+            for file in 0..8 {
+                for rank in 0..8 {
+                    let square = rank * 8 + file;
+                    if let Some(piece) = self.board.squares[square] {
+                        let piece_texture = self.piece_textures[piece];
+                        let image = Image::new(piece_texture, Vec2::new())
+                    }
+                }
+            }
         });
+        ctx.input(|input| {
+            if input.pointer.primary_pressed() {
+                let square_length = self.board_texture.size_vec2().x / 8.0;
+            }
+        })
     }
 }
