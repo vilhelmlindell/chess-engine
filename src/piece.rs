@@ -90,6 +90,19 @@ pub enum PieceType {
     King,
 }
 
+impl PieceType {
+    pub fn centipawns(&self) -> i32 {
+        match self {
+            PieceType::Pawn => 100,
+            PieceType::Knight => 320,
+            PieceType::Bishop => 330,
+            PieceType::Rook => 500,
+            PieceType::Queen => 900,
+            PieceType::King => 20000,
+        }
+    }
+}
+
 impl<T, const N: usize> Index<Piece> for [T; N] {
     type Output = T;
 
@@ -99,6 +112,19 @@ impl<T, const N: usize> Index<Piece> for [T; N] {
 }
 impl<T, const N: usize> IndexMut<Piece> for [T; N] {
     fn index_mut(&mut self, index: Piece) -> &mut Self::Output {
+        &mut self[index as usize]
+    }
+}
+
+impl<T, const N: usize> Index<PieceType> for [T; N] {
+    type Output = T;
+
+    fn index(&self, index: PieceType) -> &Self::Output {
+        &self[index as usize]
+    }
+}
+impl<T, const N: usize> IndexMut<PieceType> for [T; N] {
+    fn index_mut(&mut self, index: PieceType) -> &mut Self::Output {
         &mut self[index as usize]
     }
 }

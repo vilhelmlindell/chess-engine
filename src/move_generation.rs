@@ -8,7 +8,7 @@ use crate::piece_move::MoveType;
 use crate::tables::*;
 
 fn push_pawns(pawns: &Bitboard, empty_squares: &Bitboard, side_to_move: &Side) -> Bitboard {
-    (pawns.north() >> ((side_to_move.value()) << 4)) & *empty_squares
+    (pawns.north() << ((side_to_move.value()) << 4)) & *empty_squares
 }
 
 impl Board {
@@ -37,13 +37,13 @@ impl Board {
         };
         let bitboard = self.piece_bitboards[Piece::new(&PieceType::Pawn, &self.side_to_move)];
 
-        if let Some(end_square) = self.state.en_passant_square {
-            let mut en_passant_pawns = bitboard & PAWN_ATTACKS[self.side_to_move.enemy()][end_square];
-            while en_passant_pawns != 0 {
-                let start_square = en_passant_pawns.pop_lsb();
-                moves.push(Move::new(start_square, end_square, MoveType::EnPassant));
-            }
-        }
+        //if let Some(end_square) = self.state().en_passant_square {
+        //    let mut en_passant_pawns = bitboard & PAWN_ATTACKS[self.side_to_move.enemy()][end_square] & !self.occupied_squares;
+        //    while en_passant_pawns != 0 {
+        //        let start_square = en_passant_pawns.pop_lsb();
+        //        moves.push(Move::new(start_square, end_square, MoveType::EnPassant));
+        //    }
+        //}
 
         let mut pushed_pawns = push_pawns(&bitboard, &!self.occupied_squares, &self.side_to_move);
         let mut double_pushed_pawns = push_pawns(&pushed_pawns, &!self.occupied_squares, &self.side_to_move);
@@ -132,18 +132,18 @@ impl Board {
             }
             match self.side_to_move {
                 Side::White => {
-                    if self.state.castling_rights[self.side_to_move].kingside {
+                    if self.state().castling_rights[self.side_to_move].kingside {
                         moves.push(Move::new(60, 62, MoveType::Castle { kingside: true }));
                     }
-                    if self.state.castling_rights[self.side_to_move].queenside {
+                    if self.state().castling_rights[self.side_to_move].queenside {
                         moves.push(Move::new(60, 58, MoveType::Castle { kingside: false }));
                     }
                 }
                 Side::Black => {
-                    if self.state.castling_rights[self.side_to_move].kingside {
+                    if self.state().castling_rights[self.side_to_move].kingside {
                         moves.push(Move::new(4, 6, MoveType::Castle { kingside: true }));
                     }
-                    if self.state.castling_rights[self.side_to_move].queenside {
+                    if self.state().castling_rights[self.side_to_move].queenside {
                         moves.push(Move::new(4, 2, MoveType::Castle { kingside: false }));
                     }
                 }

@@ -1,7 +1,4 @@
 use std::io;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::thread;
 
 use crate::board::Board;
 use crate::piece_move::Move;
@@ -42,7 +39,7 @@ impl UCI {
         match command {
             "uci" => self.identify(),
             "debug" => self.set_debug(full_command),
-            "is_ready" => self.synchronize(),
+            "isready" => self.synchronize(),
             //"setoption" => self.set_option(full_command),
             //"register" => self.register(full_command),
             //"ucinewgame" => self.new_game(),
@@ -102,8 +99,7 @@ impl UCI {
                 let all_moves = board.generate_moves();
                 all_moves.iter().enumerate().for_each(|(i, val)| {
                     if val.to_string() == mov.to_string() {
-                        println!("banana");
-                        board.make_move(&all_moves[i])
+                        board.make_move(&all_moves[i]);
                     }
                 })
             }
@@ -111,7 +107,7 @@ impl UCI {
         self.board = board;
     }
     fn go(&mut self, command: &String) {
-        let mut search_option = SearchOption { depth: 4, infinite: false };
+        let mut search_option = SearchOption { depth: 6, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
         while let Some(token) = words.next() {
@@ -131,15 +127,16 @@ impl UCI {
         println!("bestmove {best_move}");
     }
     fn search(&mut self, search_option: SearchOption) -> Move {
-        let mut highest_score = i32::MIN;
+        let mut lowest_score = i32::MAX;
         let mut best_move: Option<Move> = None;
-        for mov in self.board.generate_moves() {
+        let moves = self.board.generate_moves();
+        for mov in moves {
             self.board.make_move(&mov);
             let score = self.board.alpha_beta_search(i32::MIN + 1, i32::MAX, search_option.depth);
             self.board.unmake_move(&mov);
 
-            if score > highest_score {
-                highest_score = score;
+            if score < lowest_score {
+                lowest_score = score;
                 best_move = Some(mov);
             }
         }

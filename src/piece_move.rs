@@ -13,6 +13,7 @@ pub enum MoveType {
 }
 
 #[non_exhaustive]
+#[derive(PartialEq, Eq)]
 pub struct Move {
     pub start_square: usize,
     pub end_square: usize,
@@ -46,6 +47,12 @@ impl Display for Move {
         Ok(())
     }
 }
+
+//impl PartialOrd for Move {
+//    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//
+//    }
+//}
 
 #[cfg(test)]
 mod test {
