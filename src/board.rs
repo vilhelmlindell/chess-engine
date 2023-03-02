@@ -5,7 +5,6 @@ use crate::piece_move::{Move, MoveType};
 use crate::piece_square_tables::get_positional_value;
 use crate::tables::*;
 use std::collections::HashMap;
-use std::default;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
@@ -190,20 +189,22 @@ impl Board {
         self.side_bitboards[piece.side()].clear_bit(square);
         self.piece_bitboards[piece].clear_bit(square);
         self.squares[*square] = None;
-        self.positional_balance -= get_positional_value(&piece.piece_type(), square, &piece.side());
+        self.positional_balance -= get_positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
     }
     fn set_square(&mut self, square: &usize, piece: &Piece) {
         self.occupied_squares.set_bit(square);
         self.side_bitboards[piece.side()].set_bit(square);
         self.piece_bitboards[*piece].set_bit(square);
         self.squares[*square] = Some(*piece);
-        self.positional_balance += get_positional_value(&piece.piece_type(), square, &piece.side());
+        self.positional_balance += get_positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
     }
     fn move_piece(&mut self, start_square: &usize, end_square: &usize) {
         let piece = self.squares[*start_square].unwrap();
         self.set_square(end_square, &piece);
         self.clear_square(start_square);
     }
+    fn xray_rook_attacks(occupied: &Bitboard, blockers: &Bitboard, square: &usize) {}
+    fn xray_bishop_attacks(occupied: &Bitboard, blockers: &Bitboard, square: &usize) {}
     pub fn make_move(&mut self, mov: &Move) {
         //println!("MAKE MOVE");
         //println!("{self}");
@@ -214,7 +215,7 @@ impl Board {
 
         if let Some(captured_piece) = self.squares[mov.end_square] {
             self.clear_square(&mov.end_square);
-            self.material_balance += captured_piece.piece_type().centipawns();
+            self.material_balance += captured_piece.piece_type().centipawns() * self.side_to_move.factor();
             state.captured_piece = Some(captured_piece);
         }
 
@@ -257,7 +258,7 @@ impl Board {
                 };
                 let square = (self.state().en_passant_square.unwrap() as i32 + down.value()) as usize;
                 state.captured_piece = self.squares[square];
-                self.material_balance += state.captured_piece.unwrap().piece_type().centipawns();
+                self.material_balance += state.captured_piece.unwrap().piece_type().centipawns() * self.side_to_move.factor();
                 self.clear_square(&square);
             }
         }
@@ -278,8 +279,6 @@ impl Board {
             }
         }
         self.side_to_move = self.side_to_move.enemy();
-        self.material_balance *= -1;
-        self.positional_balance *= -1;
 
         self.states.push(state);
     }
@@ -288,11 +287,13 @@ impl Board {
         //println!("{self}");
         //println!("From: {}, To: {}", mov.start_square, mov.end_square);
         //println!();
+        self.side_to_move = self.side_to_move.enemy();
 
         self.move_piece(&mov.end_square, &mov.start_square);
 
         if let Some(piece) = self.state().captured_piece {
             self.set_square(&mov.end_square, &piece);
+            self.material_balance -= piece.piece_type().centipawns() * self.side_to_move.factor();
         }
 
         match mov.move_type {
@@ -328,7 +329,6 @@ impl Board {
                 self.set_square(&square, &self.state().captured_piece.unwrap());
             }
         }
-        self.side_to_move = self.side_to_move.enemy();
 
         self.states.pop();
     }
@@ -384,6 +384,12 @@ impl Side {
         match self {
             Side::White => Side::Black,
             Side::Black => Side::White,
+        }
+    }
+    pub fn factor(&self) -> i32 {
+        match self {
+            Side::White => 1,
+            Side::Black => -1,
         }
     }
 }

@@ -68,7 +68,7 @@ mod unformatted {
     pub fn get_positional_value(piece_type: &PieceType, square: &usize, side: &Side) -> i32 {
         match side {
             Side::White => PIECE_SQUARE_TABLES[*piece_type][*square],
-            Side::Black => PIECE_SQUARE_TABLES[*piece_type][63 - *square]
+            Side::Black => PIECE_SQUARE_TABLES[*piece_type][i32::abs(56 - *square as i32) as usize]
         }
     }
 }
