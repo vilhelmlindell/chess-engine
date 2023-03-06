@@ -76,7 +76,6 @@ impl Board {
             piece_bitboards: [Bitboard(0); 12],
             states: {
                 let mut states = vec![BoardState::default()];
-                states.reserve(100000);
                 states
             },
             material_balance: 0,
@@ -203,7 +202,10 @@ impl Board {
         self.set_square(end_square, &piece);
         self.clear_square(start_square);
     }
-    fn xray_rook_attacks(occupied: &Bitboard, blockers: &Bitboard, square: &usize) {}
+    fn xray_rook_attacks(occupied: &Bitboard, blockers: &Bitboard, square: &usize) {
+        let attacks = get_rook_attacks(square, occupied);
+        blockers &= attacks;
+    }
     fn xray_bishop_attacks(occupied: &Bitboard, blockers: &Bitboard, square: &usize) {}
     pub fn make_move(&mut self, mov: &Move) {
         //println!("MAKE MOVE");
