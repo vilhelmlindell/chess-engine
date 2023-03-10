@@ -1,4 +1,5 @@
 mod app;
+mod attack_tables;
 mod bitboard;
 mod board;
 mod direction;
@@ -11,7 +12,6 @@ mod piece;
 mod piece_move;
 mod piece_square_tables;
 mod search;
-mod tables;
 mod uci;
 
 use perft::perft;

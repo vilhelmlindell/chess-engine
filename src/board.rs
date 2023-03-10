@@ -1,9 +1,9 @@
+use crate::attack_tables::*;
 use crate::bitboard::Bitboard;
 use crate::direction::Direction;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::{Move, MoveType};
 use crate::piece_square_tables::get_positional_value;
-use crate::tables::*;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
@@ -20,9 +20,9 @@ pub struct Board {
     pub squares: [Option<Piece>; 64],
     pub side_to_move: Side,
     pub occupied_squares: Bitboard,
-    pub side_bitboards: [Bitboard; 2],
+    pub side_squares: [Bitboard; 2],
     pub attacked_squares: [Bitboard; 2],
-    pub piece_bitboards: [Bitboard; 12],
+    pub piece_squares: [Bitboard; 12],
     pub states: Vec<BoardState>,
     pub material_balance: i32,
     pub positional_balance: i32,
@@ -34,9 +34,9 @@ impl Board {
             squares: [Option::<Piece>::None; 64],
             side_to_move: Side::White,
             occupied_squares: Bitboard(0),
-            side_bitboards: [Bitboard(0); 2],
+            side_squares: [Bitboard(0); 2],
             attacked_squares: [Bitboard(0); 2],
-            piece_bitboards: [Bitboard(0); 12],
+            piece_squares: [Bitboard(0); 12],
             states: vec![BoardState::default()],
             material_balance: 0,
             positional_balance: 0,
@@ -52,10 +52,10 @@ impl Board {
     }
 
     pub fn friendly_squares(&self) -> Bitboard {
-        self.side_bitboards[self.side_to_move]
+        self.side_squares[self.side_to_move]
     }
     pub fn enemy_squares(&self) -> Bitboard {
-        self.side_bitboards[self.side_to_move.enemy()]
+        self.side_squares[self.side_to_move.enemy()]
     }
     pub fn state(&self) -> BoardState {
         *self.states.last().unwrap()
@@ -215,12 +215,12 @@ impl Board {
     fn initialize_bitboards(&mut self) {
         for square in 0..64 {
             if let Some(piece) = self.squares[square] {
-                self.piece_bitboards[piece].set_bit(&square);
-                self.side_bitboards[piece.side()].set_bit(&square);
+                self.piece_squares[piece].set_bit(&square);
+                self.side_squares[piece.side()].set_bit(&square);
                 self.occupied_squares.set_bit(&square);
             } else {
-                self.piece_bitboards.iter_mut().for_each(|x| x.clear_bit(&square));
-                self.side_bitboards.iter_mut().for_each(|x| x.clear_bit(&square));
+                self.piece_squares.iter_mut().for_each(|x| x.clear_bit(&square));
+                self.side_squares.iter_mut().for_each(|x| x.clear_bit(&square));
                 self.occupied_squares.clear_bit(&square);
             }
         }
@@ -232,55 +232,70 @@ impl Board {
     }
     fn set_square(&mut self, square: &usize, piece: &Piece) {
         self.occupied_squares.set_bit(square);
-        self.side_bitboards[piece.side()].set_bit(square);
-        self.piece_bitboards[*piece].set_bit(square);
+        self.side_squares[piece.side()].set_bit(square);
+        self.piece_squares[*piece].set_bit(square);
         self.squares[*square] = Some(*piece);
         self.positional_balance += get_positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
     }
     fn clear_square(&mut self, square: &usize) {
         let piece = self.squares[*square].unwrap();
         self.occupied_squares.clear_bit(square);
-        self.side_bitboards[piece.side()].clear_bit(square);
-        self.piece_bitboards[piece].clear_bit(square);
+        self.side_squares[piece.side()].clear_bit(square);
+        self.piece_squares[piece].clear_bit(square);
         self.squares[*square] = None;
         self.positional_balance -= get_positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
     }
     fn is_attacked(&self, square: usize) -> bool {
-        let pawns = self.piece_bitboards[Piece::new(&PieceType::Pawn, &self.side_to_move.enemy())];
+        let pawns = self.piece_squares[Piece::new(&PieceType::Pawn, &self.side_to_move.enemy())];
         if (PAWN_ATTACKS[self.side_to_move.enemy()][square] & pawns).0 != 0 {
             return true;
         }
-        let knights = self.piece_bitboards[Piece::new(&PieceType::Knight, &self.side_to_move.enemy())];
+        let knights = self.piece_squares[Piece::new(&PieceType::Knight, &self.side_to_move.enemy())];
         if (KNIGHT_ATTACK_MASKS[square] & knights).0 != 0 {
             return true;
         }
-        let bishops = self.piece_bitboards[Piece::new(&PieceType::Bishop, &self.side_to_move.enemy())];
+        let bishops = self.piece_squares[Piece::new(&PieceType::Bishop, &self.side_to_move.enemy())];
         if (get_bishop_attacks(&square, &self.occupied_squares) & bishops).0 != 0 {
             return true;
         }
-        let rooks = self.piece_bitboards[Piece::new(&PieceType::Rook, &self.side_to_move.enemy())];
+        let rooks = self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move.enemy())];
         if (get_rook_attacks(&square, &self.occupied_squares) & rooks).0 != 0 {
             return true;
         }
-        let queens = self.piece_bitboards[Piece::new(&PieceType::Queen, &self.side_to_move.enemy())];
+        let queens = self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move.enemy())];
         if (get_queen_attacks(&square, &self.occupied_squares) & queens).0 != 0 {
             return true;
         }
-        let king = self.piece_bitboards[Piece::new(&PieceType::King, &self.side_to_move.enemy())];
+        let king = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move.enemy())];
         if (KING_ATTACK_MASKS[square] & king).0 != 0 {
             return true;
         }
         false
     }
-    fn xray_rook_attacks(&self, square: &usize) -> Bitboard {
+    fn xray_rook_attacks(&self, square: &usize, blockers: &Bitboard) -> Bitboard {
         let attacks = get_rook_attacks(square, &self.occupied_squares);
-        let blockers = self.side_bitboards[self.side_to_move.enemy()] & attacks;
-        attacks ^ get_rook_attacks(square, &(self.occupied_squares ^ blockers))
+        let attacked_blockers = *blockers & attacks;
+        attacks ^ get_rook_attacks(square, &(self.occupied_squares ^ attacked_blockers))
     }
-    fn xray_bishop_attacks(&self, square: &usize) -> Bitboard {
+    fn xray_bishop_attacks(&self, square: &usize, blockers: &Bitboard) -> Bitboard {
         let attacks = get_bishop_attacks(square, &self.occupied_squares);
-        let blockers = self.side_bitboards[self.side_to_move.enemy()] & attacks;
-        attacks ^ get_bishop_attacks(square, &(self.occupied_squares ^ blockers))
+        let attacked_blockers = *blockers & attacks;
+        attacks ^ get_bishop_attacks(square, &(self.occupied_squares ^ attacked_blockers))
+    }
+    fn absolute_pins(&self) {
+        let king_square = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)].lsb();
+        let pinned_squares = 0;
+        let pinners = self.xray_rook_attacks(&king_square, &self.friendly_squares()) & self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)];
+        while pinners != 0 {
+           let pinner_square = pinners.pop_lsb();
+           pinned_squares |= obstructed(sq, squareOfKing) & self.friendly_squares();
+           pinner &= pinner - 1;
+        }
+        while (pinner) {
+           int sq  = bitScanForward(pinner);
+           pinned_squares |= obstructed(sq, squareOfKing) & ownPieces;
+           pinner &= pinner - 1;
+        }
     }
 }
 
@@ -428,8 +443,7 @@ mod tests {
     #[test]
     fn sets_correct_bitboards_from_squares() {
         let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
-        board.set_bitboards_from_squares();
-        let white_pawn_bitboard = board.piece_bitboards[Piece::new(&PieceType::Pawn, &Side::White)];
+        let white_pawn_bitboard = board.piece_squares[Piece::new(&PieceType::Pawn, &Side::White)];
         assert_eq!(white_pawn_bitboard.0, 0x00FF000000000000)
     }
 }
