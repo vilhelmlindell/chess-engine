@@ -14,12 +14,14 @@ fn push_pawns(pawns: &Bitboard, empty_squares: &Bitboard, side_to_move: &Side) -
 impl Board {
     pub fn generate_moves(&self) -> Vec<Move> {
         let mut moves = Vec::<Move>::with_capacity(238);
-        self.generate_pawn_moves(&mut moves);
         self.generate_knight_moves(&mut moves);
+        if self.is_attacked(self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)].lsb()) {
+            return moves;
+        }
         self.generate_bishop_moves(&mut moves);
         self.generate_rook_moves(&mut moves);
         self.generate_queen_moves(&mut moves);
-        self.generate_king_moves(&mut moves);
+        self.generate_castling_moves(&mut moves);
         moves
     }
     fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
@@ -121,34 +123,35 @@ impl Board {
         }
     }
     fn generate_king_moves(&self, moves: &mut Vec<Move>) {
-        let mut bitboard = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)];
-
-        while bitboard != 0 {
-            let start_square = bitboard.pop_lsb();
-            let mut attack_bitboard = KING_ATTACK_MASKS[start_square] & !self.friendly_squares();
-            while attack_bitboard != 0 {
-                let end_square = attack_bitboard.pop_lsb();
+        let start_square = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)].lsb();
+        let mut attack_bitboard = KING_ATTACK_MASKS[start_square] & !self.friendly_squares();
+        while attack_bitboard != 0 {
+            let end_square = attack_bitboard.pop_lsb();
+            if !self.is_attacked(end_square) {
                 moves.push(Move::new(start_square, end_square, MoveType::Normal));
             }
-            match self.side_to_move {
-                Side::White => {
-                    if self.state().castling_rights[self.side_to_move].kingside {
-                        moves.push(Move::new(60, 62, MoveType::Castle { kingside: true }));
-                    }
-                    if self.state().castling_rights[self.side_to_move].queenside {
-                        moves.push(Move::new(60, 58, MoveType::Castle { kingside: false }));
-                    }
-                }
-                Side::Black => {
-                    if self.state().castling_rights[self.side_to_move].kingside {
-                        moves.push(Move::new(4, 6, MoveType::Castle { kingside: true }));
-                    }
-                    if self.state().castling_rights[self.side_to_move].queenside {
-                        moves.push(Move::new(4, 2, MoveType::Castle { kingside: false }));
-                    }
-                }
-            };
         }
+    }
+    fn generate_castling_moves(&self, moves: &mut Vec<Move>) {
+        let start_square = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)].lsb();
+        match self.side_to_move {
+            Side::White => {
+                if self.state().castling_rights[self.side_to_move].kingside {
+                    moves.push(Move::new(60, 62, MoveType::Castle { kingside: true }));
+                }
+                if self.state().castling_rights[self.side_to_move].queenside {
+                    moves.push(Move::new(60, 58, MoveType::Castle { kingside: false }));
+                }
+            }
+            Side::Black => {
+                if self.state().castling_rights[self.side_to_move].kingside {
+                    moves.push(Move::new(4, 6, MoveType::Castle { kingside: true }));
+                }
+                if self.state().castling_rights[self.side_to_move].queenside {
+                    moves.push(Move::new(4, 2, MoveType::Castle { kingside: false }));
+                }
+            }
+        };
     }
 }
 

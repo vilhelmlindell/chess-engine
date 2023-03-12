@@ -245,7 +245,7 @@ impl Board {
         self.squares[*square] = None;
         self.positional_balance -= get_positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
     }
-    fn is_attacked(&self, square: usize) -> bool {
+    pub fn is_attacked(&self, square: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(&PieceType::Pawn, &self.side_to_move.enemy())];
         if (PAWN_ATTACKS[self.side_to_move.enemy()][square] & pawns).0 != 0 {
             return true;
@@ -282,19 +282,24 @@ impl Board {
         let attacked_blockers = *blockers & attacks;
         attacks ^ get_bishop_attacks(square, &(self.occupied_squares ^ attacked_blockers))
     }
-    fn absolute_pins(&self) {
+    pub fn absolute_pins(&self) {
         let king_square = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)].lsb();
-        let pinned_squares = 0;
-        let pinners = self.xray_rook_attacks(&king_square, &self.friendly_squares()) & self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)];
+
+        let mut pinned_squares = Bitboard(0);
+        let mut pinners = self.xray_rook_attacks(&king_square, &self.friendly_squares())
+            & (self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)] | self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move)]);
+
         while pinners != 0 {
-           let pinner_square = pinners.pop_lsb();
-           pinned_squares |= obstructed(sq, squareOfKing) & self.friendly_squares();
-           pinner &= pinner - 1;
+            let pinner_square = pinners.pop_lsb();
+            pinned_squares |= BETWEEN_RAYS[king_square][pinner_square] & self.friendly_squares();
         }
-        while (pinner) {
-           int sq  = bitScanForward(pinner);
-           pinned_squares |= obstructed(sq, squareOfKing) & ownPieces;
-           pinner &= pinner - 1;
+
+        pinners = self.xray_bishop_attacks(&king_square, &self.friendly_squares())
+            & (self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)] | self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move)]);
+
+        while pinners != 0 {
+            let pinner_square = pinners.pop_lsb();
+            pinned_squares |= BETWEEN_RAYS[king_square][pinner_square] & self.friendly_squares();
         }
     }
 }
@@ -445,5 +450,11 @@ mod tests {
         let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
         let white_pawn_bitboard = board.piece_squares[Piece::new(&PieceType::Pawn, &Side::White)];
         assert_eq!(white_pawn_bitboard.0, 0x00FF000000000000)
+    }
+    #[test]
+    fn correct_xray_attacks() {
+        let mut board = Board::from_fen("8/8/3P4/8/8/8/8/8");
+        println!("{}", board.xray_rook_attacks(&(3 + 8 * 5), &board.friendly_squares()));
+        assert!(true);
     }
 }

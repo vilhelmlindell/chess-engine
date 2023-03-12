@@ -15,6 +15,7 @@ pub static ROOK_ATTACK_MASKS: Lazy<[Bitboard; 64]> = Lazy::new(precompute_rook_a
 pub static BISHOP_ATTACKS: Lazy<Box<[[Bitboard; 512]]>> = Lazy::new(precompute_bishop_magic_bitboards);
 pub static ROOK_ATTACKS: Lazy<Box<[[Bitboard; 4096]]>> = Lazy::new(precompute_rook_magic_bitboards);
 pub static PAWN_ATTACKS: Lazy<[[Bitboard; 64]; 2]> = Lazy::new(precompute_pawn_attacks);
+pub static BETWEEN_RAYS: Lazy<[[Bitboard; 64]; 64]> = Lazy::new(precompute_between_rays);
 
 pub fn get_bishop_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.0);
@@ -72,6 +73,21 @@ fn precompute_attack_rays() -> [[Bitboard; 8]; 64] {
         attack_rays[square] = square_attack_rays;
     }
     attack_rays
+}
+
+fn precompute_between_rays() -> [[Bitboard; 64]; 64] {
+    let mut between_rays = [[Bitboard(0); 64]; 64];
+    for square in 0..64 {
+        let mut square_between_rays = [Bitboard(0); 64];
+        for direction in Direction::all() {
+            for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
+                let end_square = (square as i32 + direction.value() * squares_to_edge as i32) as usize;
+                square_between_rays[end_square] = ATTACK_RAYS[square][direction] ^ ATTACK_RAYS[end_square][direction];
+            }
+        }
+        between_rays[square] = square_between_rays;
+    }
+    between_rays
 }
 fn precompute_knight_attack_masks() -> [Bitboard; 64] {
     let mut knight_attack_masks = [Bitboard(0); 64];
@@ -268,6 +284,11 @@ mod tests {
         assert_eq!(SQUARES_TO_EDGE[27][Direction::North], 3);
         assert_eq!(SQUARES_TO_EDGE[47][Direction::South], 2);
         assert_eq!(SQUARES_TO_EDGE[21][Direction::West], 5);
+    }
+    #[test]
+    fn between_rays_are_correct() {
+        println!("{}", BETWEEN_RAYS[40][19]);
+        assert!(true);
     }
     #[test]
     fn rook_magic_bitboards_indexes_correctly() {
