@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use crate::piece::{Piece, PieceType};
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum MoveType {
     Normal,
     Castle { kingside: bool },
@@ -21,20 +21,29 @@ pub struct Move {
 }
 
 impl Move {
-    pub fn new(start_square: usize, end_square: usize, move_type: MoveType) -> Move {
-        if start_square > 63 {
+    pub fn new(start_square: &usize, end_square: &usize, move_type: &MoveType) -> Move {
+        if *start_square > 63 {
             panic!("start square can't be larger than 63");
         }
-        if end_square > 63 {
+        if *end_square > 63 {
             panic!("end square can't be larger than 63");
         }
-        Move { start_square, end_square, move_type }
+        Move {
+            start_square: *start_square,
+            end_square: *end_square,
+            move_type: *move_type,
+        }
     }
 }
 
 impl Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let piece_chars = HashMap::from([(PieceType::Knight, 'n'), (PieceType::Bishop, 'b'), (PieceType::Rook, 'r'), (PieceType::Queen, 'q')]);
+        let piece_chars = HashMap::from([
+            (PieceType::Knight, 'n'),
+            (PieceType::Bishop, 'b'),
+            (PieceType::Rook, 'r'),
+            (PieceType::Queen, 'q'),
+        ]);
         let files = "abcdefgh";
         let start_file = files.chars().nth(self.start_square % 8).unwrap();
         let start_rank = (8 - self.start_square / 8).to_string();
@@ -60,7 +69,7 @@ mod test {
 
     #[test]
     fn parses_to_long_algebraic_notation() {
-        let mov = Move::new(0, 4, MoveType::Normal);
+        let mov = Move::new(&0, &4, &MoveType::Normal);
         assert_eq!(mov.to_string(), "a8e8");
     }
 }

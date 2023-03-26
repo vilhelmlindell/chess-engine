@@ -16,23 +16,24 @@ pub static BISHOP_ATTACKS: Lazy<Box<[[Bitboard; 512]]>> = Lazy::new(precompute_b
 pub static ROOK_ATTACKS: Lazy<Box<[[Bitboard; 4096]]>> = Lazy::new(precompute_rook_magic_bitboards);
 pub static PAWN_ATTACKS: Lazy<[[Bitboard; 64]; 2]> = Lazy::new(precompute_pawn_attacks);
 pub static BETWEEN_RAYS: Lazy<[[Bitboard; 64]; 64]> = Lazy::new(precompute_between_rays);
+pub static LINE_RAYS: Lazy<[[Bitboard; 64]; 64]> = Lazy::new(precompute_line_rays);
 
-pub fn get_bishop_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
+pub fn bishop_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.0);
     index &= BISHOP_ATTACK_MASKS[*square].0;
     index *= BISHOP_MAGIC_NUMBERS[*square];
     index >>= 64 - BISHOP_SHIFT_AMOUNT[*square] as usize;
     BISHOP_ATTACKS[*square][index.0 as usize]
 }
-pub fn get_rook_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
+pub fn rook_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.0);
     index &= ROOK_ATTACK_MASKS[*square].0;
     index *= ROOK_MAGIC_NUMBERS[*square];
     index >>= 64 - ROOK_SHIFT_AMOUNT[*square] as usize;
     ROOK_ATTACKS[*square][index.0 as usize]
 }
-pub fn get_queen_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
-    get_bishop_attacks(square, blockers) | get_rook_attacks(square, blockers)
+pub fn queen_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
+    bishop_attacks(square, blockers) | rook_attacks(square, blockers)
 }
 
 fn precompute_squares_to_edge() -> [[u32; 8]; 64] {
@@ -80,7 +81,7 @@ fn precompute_between_rays() -> [[Bitboard; 64]; 64] {
     for square in 0..64 {
         let mut square_between_rays = [Bitboard(0); 64];
         for direction in Direction::all() {
-            for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
+            for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] + 1 {
                 let end_square = (square as i32 + direction.value() * squares_to_edge as i32) as usize;
                 square_between_rays[end_square] = ATTACK_RAYS[square][direction] ^ ATTACK_RAYS[end_square][direction];
             }
@@ -88,6 +89,20 @@ fn precompute_between_rays() -> [[Bitboard; 64]; 64] {
         between_rays[square] = square_between_rays;
     }
     between_rays
+}
+fn precompute_line_rays() -> [[Bitboard; 64]; 64] {
+    let mut line_rays = [[Bitboard(0); 64]; 64];
+    for square in 0..64 {
+        let mut square_line_rays = [Bitboard(0); 64];
+        for direction in Direction::all() {
+            for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
+                let end_square = (square as i32 + direction.value() * squares_to_edge as i32) as usize;
+                square_line_rays[end_square] = ATTACK_RAYS[square][direction] | ATTACK_RAYS[square][direction.opposite()] | Bitboard(square as u64);
+            }
+        }
+        line_rays[square] = square_line_rays;
+    }
+    line_rays
 }
 fn precompute_knight_attack_masks() -> [Bitboard; 64] {
     let mut knight_attack_masks = [Bitboard(0); 64];
@@ -287,14 +302,14 @@ mod tests {
     }
     #[test]
     fn between_rays_are_correct() {
-        println!("{}", BETWEEN_RAYS[40][19]);
+        println!("{}", BETWEEN_RAYS[60][24]);
         assert!(true);
     }
     #[test]
     fn rook_magic_bitboards_indexes_correctly() {
         let square = 29;
         let blockers = Bitboard(1 << 37) | Bitboard(1 << 13) | Bitboard(1 << 21);
-        assert_eq!(get_rook_attacks(&square, &blockers), get_rook_attacks_classical(&square, &blockers));
+        assert_eq!(rook_attacks(&square, &blockers), get_rook_attacks_classical(&square, &blockers));
     }
     #[test]
     fn bishop_magic_bitboards_indexes_correctly() {

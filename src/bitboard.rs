@@ -6,10 +6,42 @@ use std::ops::Deref;
 const NOT_A_FILE: u64 = 0xfefefefefefefefe;
 const NOT_H_FILE: u64 = 0x7f7f7f7f7f7f7f7f;
 
-#[derive(MulAssign, ShrAssign, ShlAssign, BitOrAssign, BitAndAssign, BitXorAssign, BitAnd, BitOr, BitXor, Shr, Shl, Not, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(
+    MulAssign, ShrAssign, ShlAssign, BitOrAssign, BitAndAssign, BitXorAssign, BitAnd, BitOr, BitXor, Shr, Shl, Not, Clone, Copy, Debug, PartialEq, Eq,
+)]
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
+    pub fn from_square(square: &usize) -> Self {
+        Self(1 << square)
+    }
+
+    pub fn bit(&self, n: &usize) -> u64 {
+        (self.0 >> n) & 1
+    }
+    pub fn set_bit(&mut self, n: &usize) {
+        self.0 |= 1 << n;
+    }
+    pub fn clear_bit(&mut self, n: &usize) {
+        self.0 &= !(1 << n);
+    }
+    pub fn lsb(&self) -> usize {
+        self.trailing_zeros() as usize
+    }
+    pub fn msb(&self) -> usize {
+        63 - self.leading_zeros() as usize
+    }
+    pub fn pop_lsb(&mut self) -> usize {
+        let index = self.lsb();
+        self.clear_bit(&index);
+        index
+    }
+    pub fn pop_msb(&mut self) -> usize {
+        let index = self.msb();
+        self.clear_bit(&index);
+        index
+    }
+
     pub const fn north(&self) -> Bitboard {
         Bitboard(self.0 >> 8)
     }
@@ -45,31 +77,6 @@ impl Bitboard {
             Direction::SouthWest => self.south_west(),
             Direction::SouthEast => self.south_east(),
         }
-    }
-    pub fn bit(&self, n: &usize) -> u64 {
-        (self.0 >> n) & 1
-    }
-    pub fn set_bit(&mut self, n: &usize) {
-        self.0 |= 1 << n;
-    }
-    pub fn clear_bit(&mut self, n: &usize) {
-        self.0 &= !(1 << n);
-    }
-    pub fn lsb(&self) -> usize {
-        self.trailing_zeros() as usize
-    }
-    pub fn msb(&self) -> usize {
-        63 - self.leading_zeros() as usize
-    }
-    pub fn pop_lsb(&mut self) -> usize {
-        let index = self.lsb();
-        self.clear_bit(&index);
-        index
-    }
-    pub fn pop_msb(&mut self) -> usize {
-        let index = self.msb();
-        self.clear_bit(&index);
-        index
     }
 }
 impl Deref for Bitboard {

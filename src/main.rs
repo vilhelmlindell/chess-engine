@@ -15,9 +15,10 @@ mod search;
 mod uci;
 
 use perft::perft;
-use uci::UCI;
+use std::env;
 
 fn main() {
+    env::set_var("RUST_BACKTRACE", "1");
     for i in 0..7 {
         println!("Depth: {}, Nodes: {}", i, perft(&i));
     }

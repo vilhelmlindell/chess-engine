@@ -3,7 +3,7 @@ use crate::bitboard::Bitboard;
 use crate::direction::Direction;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::{Move, MoveType};
-use crate::piece_square_tables::get_positional_value;
+use crate::piece_square_tables::positional_value;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
@@ -23,6 +23,7 @@ pub struct Board {
     pub side_squares: [Bitboard; 2],
     pub attacked_squares: [Bitboard; 2],
     pub piece_squares: [Bitboard; 12],
+    pub absolute_pinned_squares: Bitboard,
     pub states: Vec<BoardState>,
     pub material_balance: i32,
     pub positional_balance: i32,
@@ -37,6 +38,7 @@ impl Board {
             side_squares: [Bitboard(0); 2],
             attacked_squares: [Bitboard(0); 2],
             piece_squares: [Bitboard(0); 12],
+            absolute_pinned_squares: Bitboard(0),
             states: vec![BoardState::default()],
             material_balance: 0,
             positional_balance: 0,
@@ -81,7 +83,10 @@ impl Board {
                 } else {
                     let square = rank * 8 + file;
                     if piece_char.is_uppercase() {
-                        self.squares[square] = Some(Piece::new(&piece_types.get(&piece_char.to_ascii_lowercase()).copied().unwrap(), &Side::White))
+                        self.squares[square] = Some(Piece::new(
+                            &piece_types.get(&piece_char.to_ascii_lowercase()).copied().unwrap(),
+                            &Side::White,
+                        ))
                     } else {
                         self.squares[square] = Some(Piece::new(&piece_types.get(&piece_char).copied().unwrap(), &Side::Black))
                     }
@@ -145,23 +150,32 @@ impl Board {
                 self.clear_square(&square);
             }
         }
-        state.castling_rights[self.side_to_move.enemy()] = CastlingRights { kingside: false, queenside: false };
+        state.castling_rights[self.side_to_move.enemy()] = CastlingRights {
+            kingside: false,
+            queenside: false,
+        };
 
         match self.side_to_move.enemy() {
             Side::White => {
-                state.castling_rights[self.side_to_move].kingside =
-                    WHITE_KINGSIDE_CASTLING_MASK & !self.occupied_squares == WHITE_KINGSIDE_CASTLING_MASK && !(self.is_attacked(60) || self.is_attacked(61) || self.is_attacked(62));
-                state.castling_rights[self.side_to_move].queenside =
-                    WHITE_QUEENSIDE_CASTLING_MASK & !self.occupied_squares == WHITE_QUEENSIDE_CASTLING_MASK && !(self.is_attacked(60) || self.is_attacked(59) || self.is_attacked(58))
+                state.castling_rights[self.side_to_move].kingside = WHITE_KINGSIDE_CASTLING_MASK & !self.occupied_squares
+                    == WHITE_KINGSIDE_CASTLING_MASK
+                    && !(self.attacked(&60) || self.attacked(&61) || self.attacked(&62));
+                state.castling_rights[self.side_to_move].queenside = WHITE_QUEENSIDE_CASTLING_MASK & !self.occupied_squares
+                    == WHITE_QUEENSIDE_CASTLING_MASK
+                    && !(self.attacked(&60) || self.attacked(&59) || self.attacked(&58))
             }
             Side::Black => {
-                state.castling_rights[self.side_to_move].kingside =
-                    BLACK_KINGSIDE_CASTLING_MASK & !self.occupied_squares == BLACK_KINGSIDE_CASTLING_MASK && !(self.is_attacked(4) || self.is_attacked(5) || self.is_attacked(6));
-                state.castling_rights[self.side_to_move].queenside =
-                    BLACK_QUEENSIDE_CASTLING_MASK & !self.occupied_squares == BLACK_QUEENSIDE_CASTLING_MASK && !(self.is_attacked(4) || self.is_attacked(3) || self.is_attacked(2));
+                state.castling_rights[self.side_to_move].kingside = BLACK_KINGSIDE_CASTLING_MASK & !self.occupied_squares
+                    == BLACK_KINGSIDE_CASTLING_MASK
+                    && !(self.attacked(&4) || self.attacked(&5) || self.attacked(&6));
+                state.castling_rights[self.side_to_move].queenside = BLACK_QUEENSIDE_CASTLING_MASK & !self.occupied_squares
+                    == BLACK_QUEENSIDE_CASTLING_MASK
+                    && !(self.attacked(&4) || self.attacked(&3) || self.attacked(&2));
             }
         }
         self.side_to_move = self.side_to_move.enemy();
+
+        self.absolute_pinned_squares = self.absolute_pins();
 
         self.states.push(state);
     }
@@ -209,6 +223,8 @@ impl Board {
             }
         }
 
+        self.absolute_pinned_squares = self.absolute_pins();
+
         self.states.pop();
     }
 
@@ -235,7 +251,7 @@ impl Board {
         self.side_squares[piece.side()].set_bit(square);
         self.piece_squares[*piece].set_bit(square);
         self.squares[*square] = Some(*piece);
-        self.positional_balance += get_positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
+        self.positional_balance += positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
     }
     fn clear_square(&mut self, square: &usize) {
         let piece = self.squares[*square].unwrap();
@@ -243,51 +259,74 @@ impl Board {
         self.side_squares[piece.side()].clear_bit(square);
         self.piece_squares[piece].clear_bit(square);
         self.squares[*square] = None;
-        self.positional_balance -= get_positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
+        self.positional_balance -= positional_value(&piece.piece_type(), square, &piece.side()) * piece.side().factor();
     }
-    pub fn is_attacked(&self, square: usize) -> bool {
+    pub fn attacked(&self, square: &usize) -> bool {
         let pawns = self.piece_squares[Piece::new(&PieceType::Pawn, &self.side_to_move.enemy())];
-        if (PAWN_ATTACKS[self.side_to_move.enemy()][square] & pawns).0 != 0 {
+        if (PAWN_ATTACKS[self.side_to_move.enemy()][*square] & pawns).0 != 0 {
             return true;
         }
         let knights = self.piece_squares[Piece::new(&PieceType::Knight, &self.side_to_move.enemy())];
-        if (KNIGHT_ATTACK_MASKS[square] & knights).0 != 0 {
+        if (KNIGHT_ATTACK_MASKS[*square] & knights).0 != 0 {
             return true;
         }
         let bishops = self.piece_squares[Piece::new(&PieceType::Bishop, &self.side_to_move.enemy())];
-        if (get_bishop_attacks(&square, &self.occupied_squares) & bishops).0 != 0 {
+        if (bishop_attacks(square, &self.occupied_squares) & bishops).0 != 0 {
             return true;
         }
         let rooks = self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move.enemy())];
-        if (get_rook_attacks(&square, &self.occupied_squares) & rooks).0 != 0 {
+        if (rook_attacks(square, &self.occupied_squares) & rooks).0 != 0 {
             return true;
         }
         let queens = self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move.enemy())];
-        if (get_queen_attacks(&square, &self.occupied_squares) & queens).0 != 0 {
-            return true;
-        }
-        let king = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move.enemy())];
-        if (KING_ATTACK_MASKS[square] & king).0 != 0 {
+        if (queen_attacks(square, &self.occupied_squares) & queens).0 != 0 {
             return true;
         }
         false
     }
+    pub fn attackers(&self, square: &usize, side: &Side) -> Bitboard {
+        let mut attackers = Bitboard(0);
+
+        let pawns = self.piece_squares[Piece::new(&PieceType::Pawn, &side.enemy())];
+        attackers |= PAWN_ATTACKS[side.enemy()][*square] & pawns;
+
+        let knights = self.piece_squares[Piece::new(&PieceType::Knight, &side.enemy())];
+        attackers |= KNIGHT_ATTACK_MASKS[*square] & knights;
+
+        let bishops = self.piece_squares[Piece::new(&PieceType::Bishop, &side.enemy())];
+        attackers |= bishop_attacks(square, &self.occupied_squares) & bishops;
+
+        let rooks = self.piece_squares[Piece::new(&PieceType::Rook, &side.enemy())];
+        attackers |= rook_attacks(square, &self.occupied_squares) & rooks;
+
+        let queens = self.piece_squares[Piece::new(&PieceType::Queen, &side.enemy())];
+        attackers |= queen_attacks(square, &self.occupied_squares) & queens;
+
+        attackers
+    }
+    pub fn aligned(square1: &usize, square2: &usize, square3: &usize) -> bool {
+        LINE_RAYS[*square1][*square2] & Bitboard(*square3 as u64) != 0
+    }
     fn xray_rook_attacks(&self, square: &usize, blockers: &Bitboard) -> Bitboard {
-        let attacks = get_rook_attacks(square, &self.occupied_squares);
+        let attacks = rook_attacks(square, &self.occupied_squares);
         let attacked_blockers = *blockers & attacks;
-        attacks ^ get_rook_attacks(square, &(self.occupied_squares ^ attacked_blockers))
+        attacks ^ rook_attacks(square, &(self.occupied_squares ^ attacked_blockers))
     }
     fn xray_bishop_attacks(&self, square: &usize, blockers: &Bitboard) -> Bitboard {
-        let attacks = get_bishop_attacks(square, &self.occupied_squares);
+        let attacks = bishop_attacks(square, &self.occupied_squares);
         let attacked_blockers = *blockers & attacks;
-        attacks ^ get_bishop_attacks(square, &(self.occupied_squares ^ attacked_blockers))
+        attacks ^ bishop_attacks(square, &(self.occupied_squares ^ attacked_blockers))
     }
-    pub fn absolute_pins(&self) {
+    fn absolute_pins(&self) -> Bitboard {
         let king_square = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)].lsb();
+        if king_square == 64 {
+            println!("{}", self);
+        }
 
         let mut pinned_squares = Bitboard(0);
         let mut pinners = self.xray_rook_attacks(&king_square, &self.friendly_squares())
-            & (self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)] | self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move)]);
+            & (self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)]
+                | self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move)]);
 
         while pinners != 0 {
             let pinner_square = pinners.pop_lsb();
@@ -295,12 +334,15 @@ impl Board {
         }
 
         pinners = self.xray_bishop_attacks(&king_square, &self.friendly_squares())
-            & (self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)] | self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move)]);
+            & (self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)]
+                | self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move)]);
 
         while pinners != 0 {
             let pinner_square = pinners.pop_lsb();
             pinned_squares |= BETWEEN_RAYS[king_square][pinner_square] & self.friendly_squares();
         }
+
+        pinned_squares
     }
 }
 
@@ -406,7 +448,16 @@ impl Default for BoardState {
     fn default() -> Self {
         Self {
             halfmove_clock: 0,
-            castling_rights: [CastlingRights { kingside: false, queenside: false }, CastlingRights { kingside: false, queenside: false }],
+            castling_rights: [
+                CastlingRights {
+                    kingside: false,
+                    queenside: false,
+                },
+                CastlingRights {
+                    kingside: false,
+                    queenside: false,
+                },
+            ],
             en_passant_square: None,
             captured_piece: None,
         }

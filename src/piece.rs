@@ -101,6 +101,12 @@ impl PieceType {
             PieceType::King => 20000,
         }
     }
+    pub fn is_slider(&self) -> bool {
+        match self {
+            PieceType::Bishop | PieceType::Rook | PieceType::Queen => true,
+            _ => false,
+        }
+    }
 }
 
 impl<T, const N: usize> Index<Piece> for [T; N] {

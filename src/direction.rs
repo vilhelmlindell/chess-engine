@@ -1,4 +1,6 @@
 use std::ops::{Index, IndexMut};
+
+use crate::board::Side;
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 
 pub enum Direction {
@@ -42,6 +44,30 @@ impl Direction {
     }
     pub const fn diagonal() -> [Direction; 4] {
         [Direction::NorthWest, Direction::NorthEast, Direction::SouthWest, Direction::SouthEast]
+    }
+    pub fn opposite(&self) -> Direction {
+        match *self {
+            Direction::North => Direction::South,
+            Direction::South => Direction::North,
+            Direction::West => Direction::East,
+            Direction::East => Direction::West,
+            Direction::NorthWest => Direction::SouthEast,
+            Direction::NorthEast => Direction::SouthWest,
+            Direction::SouthWest => Direction::NorthEast,
+            Direction::SouthEast => Direction::NorthWest,
+        }
+    }
+    pub fn up(side: &Side) -> Direction {
+        match side {
+            Side::White => Direction::North,
+            Side::Black => Direction::South,
+        }
+    }
+    pub fn down(side: &Side) -> Direction {
+        match side {
+            Side::White => Direction::South,
+            Side::Black => Direction::North,
+        }
     }
 }
 
