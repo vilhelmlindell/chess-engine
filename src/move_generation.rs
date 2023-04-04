@@ -37,9 +37,9 @@ impl Board {
                 let pawns = self.piece_squares[Piece::new(&PieceType::Pawn, &self.side_to_move)];
                 let mut pawn_blockers = attack_ray.shift(&Direction::down(&self.side_to_move)) & pawns;
                 while pawn_blockers != 0 {
-                    let end_square = pawn_blockers.pop_lsb();
-                    let start_square = (end_square as i32 + Direction::up(&self.side_to_move).value()) as usize;
-                    let mov = Move::new(&start_square, &end_square, &MoveType::Normal);
+                    let to = pawn_blockers.pop_lsb();
+                    let from = (to as i32 + Direction::up(&self.side_to_move).value()) as usize;
+                    let mov = Move::new(from, to, MoveType::Normal);
                     if self.legal(&mov) {
                         moves.push(mov);
                     }
@@ -50,9 +50,9 @@ impl Board {
                 while pawn_blockers != 0 {
                     let blocker_square = pawn_blockers.pop_lsb();
                     let mov = Move::new(
-                        &blocker_square,
-                        &((blocker_square as i32 + Direction::up(&self.side_to_move).value() * 2) as usize),
-                        &MoveType::Normal,
+                        blocker_square,
+                        (blocker_square as i32 + Direction::up(&self.side_to_move).value() * 2) as usize,
+                        MoveType::Normal,
                     );
                     if self.legal(&mov) {
                         moves.push(mov);
@@ -61,26 +61,15 @@ impl Board {
 
                 while attack_ray != 0 {
                     let intercept_square = attack_ray.pop_lsb();
-                    let mut blockers = self.attackers(&intercept_square, &self.side_to_move.enemy());
-                    while blockers != 0 {
-                        let blocker_square = blockers.pop_lsb();
-                        let mov = Move::new(&blocker_square, &intercept_square, &MoveType::Normal);
-                        if self.legal(&mov) {
-                            moves.push(mov);
-                        }
-                    }
+                    let blockers = self.attackers(&intercept_square, &self.side_to_move.enemy());
+                    self.add_moves_from_bitboard(blockers, |from| Move::new(from, intercept_square, MoveType::Normal), &mut moves);
+
                     // look for en passant blocks
-                    if let Some(end_square) = self.state().en_passant_square {
-                        if attack_ray & Bitboard::from_square(&end_square) != 0 {
-                            let mut en_passant_pawns = PAWN_ATTACKS[self.side_to_move.enemy()][end_square]
+                    if let Some(to) = self.state().en_passant_square {
+                        if attack_ray & Bitboard::from_square(&to) != 0 {
+                            let en_passant_pawns = PAWN_ATTACKS[self.side_to_move.enemy()][to]
                                 & self.piece_squares[Piece::new(&PieceType::Pawn, &self.side_to_move)];
-                            while en_passant_pawns != 0 {
-                                let start_square = en_passant_pawns.pop_lsb();
-                                let mov = Move::new(&start_square, &end_square, &MoveType::EnPassant);
-                                if self.legal(&mov) {
-                                    moves.push(mov);
-                                }
-                            }
+                            self.add_moves_from_bitboard(en_passant_pawns, |from| Move::new(from, to, MoveType::Normal), &mut moves);
                         }
                     }
                 }
@@ -88,7 +77,7 @@ impl Board {
             // otherwise we can capture the checker
             while king_attackers != 0 {
                 let attacker_square = king_attackers.pop_lsb();
-                let mov = Move::new(&attacker_square, &checker_square, &MoveType::Normal);
+                let mov = Move::new(attacker_square, checker_square, MoveType::Normal);
                 if self.legal(&mov) {
                     moves.push(mov);
                 }
@@ -104,15 +93,28 @@ impl Board {
         self.generate_castling_moves(&mut moves);
         moves
     }
+    fn resolve_single_check(moves: &mut Vec<Move>) {
+
+    }
     fn legal(&self, mov: &Move) -> bool {
         // a non king move is only legal if the piece isn't pinned or it's moving along the ray
         // between the piece and the king
-        self.absolute_pinned_squares.bit(&mov.start_square) == 0
+        self.absolute_pinned_squares.bit(&mov.from) == 0
             || Self::aligned(
-                &mov.start_square,
-                &mov.end_square,
-                &self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)].lsb(),
+            &mov.from,
+            &mov.to,
+            &self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)].lsb(),
             )
+    }
+
+    fn add_moves_from_bitboard<F: Fn(usize) -> Move>(&self, mut bitboard: Bitboard, mov: F, moves: &mut Vec<Move>) {
+        while bitboard != 0 {
+            let end_square = bitboard.pop_lsb();
+            let mov = mov(end_square);
+            if self.legal(&mov) {
+                moves.push(mov);
+            }
+        }
     }
     fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
         let up: &Direction = match self.side_to_move {
@@ -129,120 +131,71 @@ impl Board {
         };
         let bitboard = self.piece_squares[Piece::new(&PieceType::Pawn, &self.side_to_move)];
 
-        if let Some(end_square) = self.state().en_passant_square {
-            let mut en_passant_pawns = bitboard & PAWN_ATTACKS[self.side_to_move.enemy()][end_square] & !self.occupied_squares;
+        if let Some(to) = self.state().en_passant_square {
+            let mut en_passant_pawns = bitboard & PAWN_ATTACKS[self.side_to_move.enemy()][to] & !self.occupied_squares;
             while en_passant_pawns != 0 {
-                let start_square = en_passant_pawns.pop_lsb();
-                moves.push(Move::new(&start_square, &end_square, &MoveType::EnPassant));
+                let from = en_passant_pawns.pop_lsb();
+                moves.push(Move::new(from, to, MoveType::EnPassant));
             }
         }
 
-        let mut pushed_pawns = push_pawns(&bitboard, &!self.occupied_squares, &self.side_to_move);
-        let mut double_pushed_pawns = push_pawns(&pushed_pawns, &!self.occupied_squares, &self.side_to_move);
+        let pushed_pawns = push_pawns(&bitboard, &!self.occupied_squares, &self.side_to_move);
+        let double_pushed_pawns = push_pawns(&pushed_pawns, &!self.occupied_squares, &self.side_to_move);
 
-        while pushed_pawns != 0 {
-            let end_square = pushed_pawns.pop_lsb();
-            let start_square = (end_square as i32 - up.value()) as usize;
-            let mov = Move::new(&start_square, &end_square, &MoveType::Normal);
-            if self.legal(&mov) {
-                moves.push(mov);
-            }
-        }
-        while double_pushed_pawns != 0 {
-            let end_square = double_pushed_pawns.pop_lsb();
-            let start_square = (end_square as i32 - up.value() * 2) as usize;
-            let mov = Move::new(&start_square, &end_square, &MoveType::DoublePush);
-            if self.legal(&mov) {
-                moves.push(mov);
-            }
-        }
-        let mut capturing_pawns_up_left = bitboard.shift(up_left) & self.enemy_squares();
-        let mut capturing_pawns_up_right = bitboard.shift(up_right) & self.enemy_squares();
+        self.add_moves_from_bitboard(pushed_pawns, |to| Move::new((to as i32 - up.value()) as usize, to, MoveType::Normal), moves);
+        self.add_moves_from_bitboard(double_pushed_pawns, |to| Move::new((to as i32 - up.value() * 2) as usize, to, MoveType::DoublePush), moves);
 
-        while capturing_pawns_up_left != 0 {
-            let end_square = capturing_pawns_up_left.pop_lsb();
-            let start_square = (end_square as i32 - up_left.value()) as usize;
-            let mov = Move::new(&start_square, &end_square, &MoveType::Normal);
-            if self.legal(&mov) {
-                moves.push(mov);
-            }
-        }
-        while capturing_pawns_up_right != 0 {
-            let end_square = capturing_pawns_up_right.pop_lsb();
-            let start_square = (end_square as i32 - up_right.value()) as usize;
-            let mov = Move::new(&start_square, &end_square, &MoveType::Normal);
-            if self.legal(&mov) {
-                moves.push(mov);
-            }
-        }
+        let capturing_pawns_up_left = bitboard.shift(up_left) & self.enemy_squares();
+        let capturing_pawns_up_right = bitboard.shift(up_right) & self.enemy_squares();
+
+        self.add_moves_from_bitboard(capturing_pawns_up_left, |to| Move::new((to as i32 - up_left.value()) as usize, to, MoveType::Normal), moves);
+        self.add_moves_from_bitboard(capturing_pawns_up_right, |to| Move::new((to as i32 - up_right.value()) as usize, to, MoveType::Normal), moves);
     }
     fn generate_knight_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_squares[Piece::new(&PieceType::Knight, &self.side_to_move)];
 
         while bitboard != 0 {
-            let start_square = bitboard.pop_lsb();
-            let mut attack_bitboard = KNIGHT_ATTACK_MASKS[start_square] & !self.friendly_squares();
-            while attack_bitboard != 0 {
-                let end_square = attack_bitboard.pop_lsb();
-                let mov = Move::new(&start_square, &end_square, &MoveType::Normal);
-                if self.legal(&mov) {
-                    moves.push(mov);
-                }
-            }
+            let from = bitboard.pop_lsb();
+            let attack_bitboard = KNIGHT_ATTACK_MASKS[from] & !self.friendly_squares();
+            self.add_moves_from_bitboard(attack_bitboard, |to| Move::new(from, to, MoveType::Normal), moves);
         }
     }
     fn generate_bishop_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_squares[Piece::new(&PieceType::Bishop, &self.side_to_move)];
 
         while bitboard != 0 {
-            let start_square = bitboard.pop_lsb();
-            let mut attack_bitboard = bishop_attacks(&start_square, &self.occupied_squares) & !self.friendly_squares();
-            while attack_bitboard != 0 {
-                let end_square = attack_bitboard.pop_lsb();
-                let mov = Move::new(&start_square, &end_square, &MoveType::Normal);
-                if self.legal(&mov) {
-                    moves.push(mov);
-                }
-            }
+            let from = bitboard.pop_lsb();
+            let attack_bitboard = bishop_attacks(&from, &self.occupied_squares) & !self.friendly_squares();
+            self.add_moves_from_bitboard(attack_bitboard, |to| Move::new(from, to, MoveType::Normal), moves);
         }
     }
     fn generate_rook_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_squares[Piece::new(&PieceType::Rook, &self.side_to_move)];
 
         while bitboard != 0 {
-            let start_square = bitboard.pop_lsb();
-            let mut attack_bitboard = rook_attacks(&start_square, &self.occupied_squares) & !self.friendly_squares();
-            while attack_bitboard != 0 {
-                let end_square = attack_bitboard.pop_lsb();
-                let mov = Move::new(&start_square, &end_square, &MoveType::Normal);
-                if self.legal(&mov) {
-                    moves.push(mov);
-                }
-            }
+            let from = bitboard.pop_lsb();
+            let attack_bitboard = rook_attacks(&from, &self.occupied_squares) & !self.friendly_squares();
+
+            self.add_moves_from_bitboard(attack_bitboard, |to| Move::new(from, to, MoveType::Normal), moves);
         }
     }
     fn generate_queen_moves(&self, moves: &mut Vec<Move>) {
         let mut bitboard = self.piece_squares[Piece::new(&PieceType::Queen, &self.side_to_move)];
 
         while bitboard != 0 {
-            let start_square = bitboard.pop_lsb();
-            let mut attack_bitboard = queen_attacks(&start_square, &self.occupied_squares) & !self.friendly_squares();
-            while attack_bitboard != 0 {
-                let end_square = attack_bitboard.pop_lsb();
-                let mov = Move::new(&start_square, &end_square, &MoveType::Normal);
-                if self.legal(&mov) {
-                    moves.push(mov);
-                }
-            }
+            let from = bitboard.pop_lsb();
+            let attack_bitboard = queen_attacks(&from, &self.occupied_squares) & !self.friendly_squares();
+
+            self.add_moves_from_bitboard(attack_bitboard, |to| Move::new(from, to, MoveType::Normal), moves);
         }
     }
     fn generate_king_moves(&self, moves: &mut Vec<Move>) {
-        let start_square = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)].lsb();
-        let mut attack_bitboard = KING_ATTACK_MASKS[start_square] & !self.friendly_squares();
+        let from = self.piece_squares[Piece::new(&PieceType::King, &self.side_to_move)].lsb();
+        let mut attack_bitboard = KING_ATTACK_MASKS[from] & !self.friendly_squares();
         while attack_bitboard != 0 {
-            let end_square = attack_bitboard.pop_lsb();
-            if !self.attacked(&end_square) {
-                moves.push(Move::new(&start_square, &end_square, &MoveType::Normal));
+            let to = attack_bitboard.pop_lsb();
+            if !self.attacked(&to) {
+                moves.push(Move::new(from, to, MoveType::Normal));
             }
         }
     }
@@ -250,18 +203,18 @@ impl Board {
         match self.side_to_move {
             Side::White => {
                 if self.state().castling_rights[self.side_to_move].kingside {
-                    moves.push(Move::new(&60, &62, &MoveType::Castle { kingside: true }));
+                    moves.push(Move::new(60, 62, MoveType::Castle { kingside: true }));
                 }
                 if self.state().castling_rights[self.side_to_move].queenside {
-                    moves.push(Move::new(&60, &58, &MoveType::Castle { kingside: false }));
+                    moves.push(Move::new(60, 58, MoveType::Castle { kingside: false }));
                 }
             }
             Side::Black => {
                 if self.state().castling_rights[self.side_to_move].kingside {
-                    moves.push(Move::new(&4, &6, &MoveType::Castle { kingside: true }));
+                    moves.push(Move::new(4, 6, MoveType::Castle { kingside: true }));
                 }
                 if self.state().castling_rights[self.side_to_move].queenside {
-                    moves.push(Move::new(&4, &2, &MoveType::Castle { kingside: false }));
+                    moves.push(Move::new(4, 2, MoveType::Castle { kingside: false }));
                 }
             }
         };
@@ -273,15 +226,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generates_correct_pawn_moves() {
-        let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
+    fn test_pawn_moves() {
+        let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
         let mut moves = Vec::<Move>::new();
         board.generate_pawn_moves(&mut moves);
         assert_eq!(moves.len(), 16);
     }
     #[test]
-    fn generates_correct_knight_moves() {
-        let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
+    fn test_knight_moves() {
+        let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR");
         let mut moves = Vec::<Move>::new();
         board.generate_knight_moves(&mut moves);
         assert_eq!(moves.len(), 4);

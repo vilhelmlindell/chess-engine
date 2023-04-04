@@ -101,13 +101,13 @@ impl Board {
     pub fn make_move(&mut self, mov: &Move) {
         let mut state = BoardState::from_state(&self.state());
 
-        if let Some(captured_piece) = self.squares[mov.end_square] {
-            self.clear_square(&mov.end_square);
+        if let Some(captured_piece) = self.squares[mov.to] {
+            self.clear_square(&mov.to);
             self.material_balance += captured_piece.piece_type().centipawns() * self.side_to_move.factor();
             state.captured_piece = Some(captured_piece);
         }
 
-        self.move_piece(&mov.start_square, &mov.end_square);
+        self.move_piece(&mov.from, &mov.to);
 
         match mov.move_type {
             MoveType::Normal => {}
@@ -132,12 +132,12 @@ impl Board {
                     Side::White => Direction::South,
                     Side::Black => Direction::North,
                 };
-                state.en_passant_square = Some((mov.end_square as i32 + down.value()) as usize);
+                state.en_passant_square = Some((mov.to as i32 + down.value()) as usize);
             }
             MoveType::Promotion(piece_type) => {
                 let piece = Piece::new(&piece_type, &self.side_to_move);
-                self.clear_square(&mov.end_square);
-                self.set_square(&mov.end_square, &piece);
+                self.clear_square(&mov.to);
+                self.set_square(&mov.to, &piece);
             }
             MoveType::EnPassant => {
                 let down: &Direction = match self.side_to_move {
@@ -182,10 +182,10 @@ impl Board {
     pub fn unmake_move(&mut self, mov: &Move) {
         self.side_to_move = self.side_to_move.enemy();
 
-        self.move_piece(&mov.end_square, &mov.start_square);
+        self.move_piece(&mov.to, &mov.from);
 
         if let Some(piece) = self.state().captured_piece {
-            self.set_square(&mov.end_square, &piece);
+            self.set_square(&mov.to, &piece);
             self.material_balance -= piece.piece_type().centipawns() * self.side_to_move.factor();
         }
 
@@ -209,7 +209,7 @@ impl Board {
             },
             MoveType::DoublePush => {}
             MoveType::Promotion(_) => {
-                self.set_square(&mov.start_square, &Piece::new(&PieceType::Pawn, &self.side_to_move.enemy()));
+                self.set_square(&mov.from, &Piece::new(&PieceType::Pawn, &self.side_to_move.enemy()));
             }
             MoveType::EnPassant => {
                 let down: &Direction = match self.side_to_move {
