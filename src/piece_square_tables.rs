@@ -65,10 +65,10 @@ mod unformatted {
 
     const PIECE_SQUARE_TABLES: [[i32; 64]; 6] = [PAWN_SQUARE_TABLE, KNIGHT_SQUARE_TABLE, BISHOP_SQUARE_TABLE, ROOK_SQUARE_TABLE, QUEEN_SQUARE_TABLE, KING_SQUARE_TABLE];
 
-    pub fn positional_value(piece_type: &PieceType, square: &usize, side: &Side) -> i32 {
+    pub fn positional_value(piece_type: PieceType, square: usize, side: Side) -> i32 {
         match side {
-            Side::White => PIECE_SQUARE_TABLES[*piece_type][*square],
-            Side::Black => PIECE_SQUARE_TABLES[*piece_type][i32::abs(56 - *square as i32) as usize]
+            Side::White => PIECE_SQUARE_TABLES[piece_type][square],
+            Side::Black => PIECE_SQUARE_TABLES[piece_type][i32::abs(56 - square as i32) as usize]
         }
     }
 }

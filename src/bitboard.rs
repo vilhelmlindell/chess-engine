@@ -6,23 +6,21 @@ use std::ops::Deref;
 const NOT_A_FILE: u64 = 0xfefefefefefefefe;
 const NOT_H_FILE: u64 = 0x7f7f7f7f7f7f7f7f;
 
-#[derive(
-    MulAssign, ShrAssign, ShlAssign, BitOrAssign, BitAndAssign, BitXorAssign, BitAnd, BitOr, BitXor, Shr, Shl, Not, Clone, Copy, Debug, PartialEq, Eq,
-)]
+#[derive(MulAssign, ShrAssign, ShlAssign, BitOrAssign, BitAndAssign, BitXorAssign, BitAnd, BitOr, BitXor, Shr, Shl, Not, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
-    pub fn from_square(square: &usize) -> Self {
+    pub fn from_square(square: usize) -> Self {
         Self(1 << square)
     }
 
-    pub fn bit(&self, n: &usize) -> u64 {
+    pub fn bit(&self, n: usize) -> u64 {
         (self.0 >> n) & 1
     }
-    pub fn set_bit(&mut self, n: &usize) {
+    pub fn set_bit(&mut self, n: usize) {
         self.0 |= 1 << n;
     }
-    pub fn clear_bit(&mut self, n: &usize) {
+    pub fn clear_bit(&mut self, n: usize) {
         self.0 &= !(1 << n);
     }
     pub fn lsb(&self) -> usize {
@@ -33,12 +31,12 @@ impl Bitboard {
     }
     pub fn pop_lsb(&mut self) -> usize {
         let index = self.lsb();
-        self.clear_bit(&index);
+        self.clear_bit(index);
         index
     }
     pub fn pop_msb(&mut self) -> usize {
         let index = self.msb();
-        self.clear_bit(&index);
+        self.clear_bit(index);
         index
     }
 
@@ -66,7 +64,7 @@ impl Bitboard {
     pub const fn south_east(&self) -> Bitboard {
         Bitboard((self.0 << 9) & NOT_A_FILE)
     }
-    pub const fn shift(&self, direction: &Direction) -> Bitboard {
+    pub const fn shift(&self, direction: Direction) -> Bitboard {
         match direction {
             Direction::North => self.north(),
             Direction::South => self.south(),
@@ -79,6 +77,16 @@ impl Bitboard {
         }
     }
 }
+impl Iterator for Bitboard {
+    type Item = usize;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0 == 0 {
+            return None;
+        }
+        let index = self.pop_lsb();
+        Some(index)
+    }
+}
 impl Deref for Bitboard {
     type Target = u64;
     fn deref(&self) -> &Self::Target {
@@ -89,7 +97,7 @@ impl Display for Bitboard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for rank in 0..8 {
             for file in 0..8 {
-                write!(f, " {}", self.bit(&(rank * 8 + file))).unwrap();
+                write!(f, " {}", self.bit(rank * 8 + file)).unwrap();
             }
             writeln!(f).unwrap();
         }
@@ -108,6 +116,6 @@ mod tests {
     #[test]
     fn shifts_bits_correctly() {
         let bitboard = Bitboard(0x00FF000000000000);
-        assert_eq!(bitboard.shift(&Direction::NorthEast), Bitboard(0x0000fe0000000000));
+        assert_eq!(bitboard.shift(Direction::NorthEast), Bitboard(0x0000fe0000000000));
     }
 }

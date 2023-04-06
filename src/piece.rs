@@ -18,7 +18,7 @@ pub enum Piece {
 }
 
 impl Piece {
-    pub fn new(piece_type: &PieceType, side: &Side) -> Piece {
+    pub fn new(piece_type: PieceType, side: Side) -> Piece {
         match piece_type {
             PieceType::Pawn => match &side {
                 Side::White => Piece::WhitePawn,

@@ -18,21 +18,21 @@ pub static PAWN_ATTACKS: Lazy<[[Bitboard; 64]; 2]> = Lazy::new(precompute_pawn_a
 pub static BETWEEN_RAYS: Lazy<[[Bitboard; 64]; 64]> = Lazy::new(precompute_between_rays);
 pub static LINE_RAYS: Lazy<[[Bitboard; 64]; 64]> = Lazy::new(precompute_line_rays);
 
-pub fn bishop_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
+pub fn bishop_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.0);
-    index &= BISHOP_ATTACK_MASKS[*square].0;
-    index *= BISHOP_MAGIC_NUMBERS[*square];
-    index >>= 64 - BISHOP_SHIFT_AMOUNT[*square] as usize;
-    BISHOP_ATTACKS[*square][index.0 as usize]
+    index &= BISHOP_ATTACK_MASKS[square].0;
+    index *= BISHOP_MAGIC_NUMBERS[square];
+    index >>= 64 - BISHOP_SHIFT_AMOUNT[square] as usize;
+    BISHOP_ATTACKS[square][index.0 as usize]
 }
-pub fn rook_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
+pub fn rook_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.0);
-    index &= ROOK_ATTACK_MASKS[*square].0;
-    index *= ROOK_MAGIC_NUMBERS[*square];
-    index >>= 64 - ROOK_SHIFT_AMOUNT[*square] as usize;
-    ROOK_ATTACKS[*square][index.0 as usize]
+    index &= ROOK_ATTACK_MASKS[square].0;
+    index *= ROOK_MAGIC_NUMBERS[square];
+    index >>= 64 - ROOK_SHIFT_AMOUNT[square] as usize;
+    ROOK_ATTACKS[square][index.0 as usize]
 }
-pub fn queen_attacks(square: &usize, blockers: &Bitboard) -> Bitboard {
+pub fn queen_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     bishop_attacks(square, blockers) | rook_attacks(square, blockers)
 }
 
@@ -67,7 +67,7 @@ fn precompute_attack_rays() -> [[Bitboard; 8]; 64] {
             let mut attack_ray = Bitboard(0);
             for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] + 1 {
                 let end_square = square as i32 + direction.value() * squares_to_edge as i32;
-                attack_ray.set_bit(&(end_square as usize));
+                attack_ray.set_bit(end_square as usize);
             }
             square_attack_rays[direction] = attack_ray;
         }
@@ -121,7 +121,7 @@ fn precompute_knight_attack_masks() -> [Bitboard; 64] {
         for direction in directions {
             let end_square = square + direction;
             if (0..64).contains(&end_square) && i32::abs(square % 8 - end_square % 8) <= 2 {
-                knight_attack_bitboard.set_bit(&(end_square as usize));
+                knight_attack_bitboard.set_bit(end_square as usize);
             }
         }
         knight_attack_masks[square as usize] = knight_attack_bitboard;
@@ -135,7 +135,7 @@ fn precompute_king_attack_masks() -> [Bitboard; 64] {
         for direction in Direction::all() {
             let end_square = square + direction.value();
             if (0..64).contains(&end_square) && i32::abs(square % 8 - end_square % 8) <= 2 {
-                king_attack_bitboard.set_bit(&(end_square as usize));
+                king_attack_bitboard.set_bit(end_square as usize);
             }
         }
         king_attack_masks[square as usize] = king_attack_bitboard;
@@ -149,7 +149,7 @@ fn precompute_rook_attack_mask() -> [Bitboard; 64] {
         for direction in Direction::orthagonal() {
             for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
                 let end_square = square as i32 + direction.value() * squares_to_edge as i32;
-                attack_mask.set_bit(&(end_square as usize));
+                attack_mask.set_bit(end_square as usize);
             }
         }
         attack_masks[square] = attack_mask;
@@ -163,7 +163,7 @@ fn precompute_bishop_attack_mask() -> [Bitboard; 64] {
         for direction in Direction::diagonal() {
             for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
                 let end_square = square as i32 + direction.value() * squares_to_edge as i32;
-                attack_mask.set_bit(&(end_square as usize));
+                attack_mask.set_bit(end_square as usize);
             }
         }
         attack_masks[square] = attack_mask;
@@ -179,59 +179,59 @@ fn precompute_pawn_attacks() -> [[Bitboard; 64]; 2] {
     }
     pawn_attacks
 }
-pub fn get_bishop_attacks_classical(square: &usize, blockers: &Bitboard) -> Bitboard {
+pub fn get_bishop_attacks_classical(square: usize, blockers: Bitboard) -> Bitboard {
     let mut attacks = Bitboard(0);
 
-    attacks |= ATTACK_RAYS[*square][Direction::NorthWest];
-    if ATTACK_RAYS[*square][Direction::NorthWest] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::NorthWest] & *blockers).msb();
+    attacks |= ATTACK_RAYS[square][Direction::NorthWest];
+    if ATTACK_RAYS[square][Direction::NorthWest] & blockers != 0 {
+        let blocker_index = (ATTACK_RAYS[square][Direction::NorthWest] & blockers).msb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::NorthWest];
     }
 
-    attacks |= ATTACK_RAYS[*square][Direction::NorthEast];
-    if ATTACK_RAYS[*square][Direction::NorthEast] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::NorthEast] & *blockers).msb();
+    attacks |= ATTACK_RAYS[square][Direction::NorthEast];
+    if ATTACK_RAYS[square][Direction::NorthEast] & blockers != 0 {
+        let blocker_index = (ATTACK_RAYS[square][Direction::NorthEast] & blockers).msb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::NorthEast];
     }
 
-    attacks |= ATTACK_RAYS[*square][Direction::SouthWest];
-    if ATTACK_RAYS[*square][Direction::SouthWest] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::SouthWest] & *blockers).lsb();
+    attacks |= ATTACK_RAYS[square][Direction::SouthWest];
+    if ATTACK_RAYS[square][Direction::SouthWest] & blockers != 0 {
+        let blocker_index = (ATTACK_RAYS[square][Direction::SouthWest] & blockers).lsb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::SouthWest];
     }
 
-    attacks |= ATTACK_RAYS[*square][Direction::SouthEast];
-    if ATTACK_RAYS[*square][Direction::SouthEast] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::SouthEast] & *blockers).lsb();
+    attacks |= ATTACK_RAYS[square][Direction::SouthEast];
+    if ATTACK_RAYS[square][Direction::SouthEast] & blockers != 0 {
+        let blocker_index = (ATTACK_RAYS[square][Direction::SouthEast] & blockers).lsb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::SouthEast];
     }
 
     attacks
 }
-pub fn get_rook_attacks_classical(square: &usize, blockers: &Bitboard) -> Bitboard {
+pub fn get_rook_attacks_classical(square: usize, blockers: Bitboard) -> Bitboard {
     let mut attacks = Bitboard(0);
 
-    attacks |= ATTACK_RAYS[*square][Direction::North];
-    if ATTACK_RAYS[*square][Direction::North] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::North] & *blockers).msb();
+    attacks |= ATTACK_RAYS[square][Direction::North];
+    if ATTACK_RAYS[square][Direction::North] & blockers != 0 {
+        let blocker_index = (ATTACK_RAYS[square][Direction::North] & blockers).msb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::North];
     }
 
-    attacks |= ATTACK_RAYS[*square][Direction::West];
-    if ATTACK_RAYS[*square][Direction::West] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::West] & *blockers).msb();
+    attacks |= ATTACK_RAYS[square][Direction::West];
+    if ATTACK_RAYS[square][Direction::West] & blockers != 0 {
+        let blocker_index = (ATTACK_RAYS[square][Direction::West] & blockers).msb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::West];
     }
 
-    attacks |= ATTACK_RAYS[*square][Direction::South];
-    if ATTACK_RAYS[*square][Direction::South] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::South] & *blockers).lsb();
+    attacks |= ATTACK_RAYS[square][Direction::South];
+    if ATTACK_RAYS[square][Direction::South] & blockers != 0 {
+        let blocker_index = (ATTACK_RAYS[square][Direction::South] & blockers).lsb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::South];
     }
 
-    attacks |= ATTACK_RAYS[*square][Direction::East];
-    if ATTACK_RAYS[*square][Direction::East] & *blockers != 0 {
-        let blocker_index = (ATTACK_RAYS[*square][Direction::East] & *blockers).lsb();
+    attacks |= ATTACK_RAYS[square][Direction::East];
+    if ATTACK_RAYS[square][Direction::East] & blockers != 0 {
+        let blocker_index = (ATTACK_RAYS[square][Direction::East] & blockers).lsb();
         attacks &= !ATTACK_RAYS[blocker_index][Direction::East];
     }
 
@@ -248,12 +248,12 @@ fn precompute_bishop_magic_bitboards() -> Box<[[Bitboard; 512]]> {
             while attack_mask.0 != 0 {
                 let blocker_index = attack_mask.pop_lsb();
                 if (blocker_combination >> blocker_count) & 1 == 1 {
-                    blockers.set_bit(&blocker_index);
+                    blockers.set_bit(blocker_index);
                 }
                 blocker_count += 1;
             }
 
-            let square_bishop_attacks = get_bishop_attacks_classical(&square, &blockers);
+            let square_bishop_attacks = get_bishop_attacks_classical(square, blockers);
             let mut index = Wrapping(blockers.0);
             index *= BISHOP_MAGIC_NUMBERS[square];
             index >>= 64 - BISHOP_SHIFT_AMOUNT[square] as usize;
@@ -274,12 +274,12 @@ fn precompute_rook_magic_bitboards() -> Box<[[Bitboard; 4096]]> {
             while attack_mask.0 != 0 {
                 let blocker_index = attack_mask.pop_lsb();
                 if (blocker_combination >> blocker_count) & 1 == 1 {
-                    blockers.set_bit(&blocker_index);
+                    blockers.set_bit(blocker_index);
                 }
                 blocker_count += 1;
             }
 
-            let square_rook_attacks = get_rook_attacks_classical(&square, &blockers);
+            let square_rook_attacks = get_rook_attacks_classical(square, blockers);
             let mut index = Wrapping(blockers.0);
             index *= ROOK_MAGIC_NUMBERS[square];
             index >>= 64 - ROOK_SHIFT_AMOUNT[square] as usize;
@@ -294,25 +294,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn number_of_squares_to_edge_are_correct() {
+    fn test_number_of_squares_to_edge() {
         assert_eq!(SQUARES_TO_EDGE[4][Direction::East], 3);
         assert_eq!(SQUARES_TO_EDGE[27][Direction::North], 3);
         assert_eq!(SQUARES_TO_EDGE[47][Direction::South], 2);
         assert_eq!(SQUARES_TO_EDGE[21][Direction::West], 5);
     }
     #[test]
-    fn between_rays_are_correct() {
+    fn test_between_rays() {
         println!("{}", BETWEEN_RAYS[60][24]);
         assert!(true);
     }
     #[test]
-    fn rook_magic_bitboards_indexes_correctly() {
+    fn test_rook_magic_bitboards_indexing() {
         let square = 29;
         let blockers = Bitboard(1 << 37) | Bitboard(1 << 13) | Bitboard(1 << 21);
-        assert_eq!(rook_attacks(&square, &blockers), get_rook_attacks_classical(&square, &blockers));
+        assert_eq!(rook_attacks(square, blockers), get_rook_attacks_classical(square, blockers));
     }
     #[test]
-    fn bishop_magic_bitboards_indexes_correctly() {
+    fn test_bishop_magic_bitboards_indexing() {
         println!("{}", PAWN_ATTACKS[Side::White][36]);
         assert!(true);
     }

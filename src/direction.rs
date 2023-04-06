@@ -57,13 +57,13 @@ impl Direction {
             Direction::SouthEast => Direction::NorthWest,
         }
     }
-    pub fn up(side: &Side) -> Direction {
+    pub fn up(side: Side) -> Direction {
         match side {
             Side::White => Direction::North,
             Side::Black => Direction::South,
         }
     }
-    pub fn down(side: &Side) -> Direction {
+    pub fn down(side: Side) -> Direction {
         match side {
             Side::White => Direction::South,
             Side::Black => Direction::North,

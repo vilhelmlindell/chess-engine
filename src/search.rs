@@ -8,9 +8,9 @@ impl Board {
             return self.quiescense_search(alpha, beta);
         }
         for mov in self.generate_moves() {
-            self.make_move(&mov);
+            self.make_move(mov);
             let score = -self.alpha_beta_search(-beta, -alpha, depth_left - 1);
-            self.unmake_move(&mov);
+            self.unmake_move(mov);
             if score >= beta {
                 return beta;
             }
@@ -30,9 +30,9 @@ impl Board {
         }
         for mov in self.generate_moves() {
             if self.state().captured_piece != None {
-                self.make_move(&mov);
+                self.make_move(mov);
                 let score = -self.quiescense_search(-beta, -alpha);
-                self.unmake_move(&mov);
+                self.unmake_move(mov);
 
                 if score >= beta {
                     return beta;

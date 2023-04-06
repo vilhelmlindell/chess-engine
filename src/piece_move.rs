@@ -13,7 +13,7 @@ pub enum MoveType {
 }
 
 #[non_exhaustive]
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct Move {
     pub from: usize,
     pub to: usize,
@@ -38,12 +38,7 @@ impl Move {
 
 impl Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let piece_chars = HashMap::from([
-            (PieceType::Knight, 'n'),
-            (PieceType::Bishop, 'b'),
-            (PieceType::Rook, 'r'),
-            (PieceType::Queen, 'q'),
-        ]);
+        let piece_chars = HashMap::from([(PieceType::Knight, 'n'), (PieceType::Bishop, 'b'), (PieceType::Rook, 'r'), (PieceType::Queen, 'q')]);
         let files = "abcdefgh";
         let start_file = files.chars().nth(self.from % 8).unwrap();
         let start_rank = (8 - self.from / 8).to_string();

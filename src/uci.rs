@@ -32,9 +32,9 @@ impl UCI {
     fn process_input(&mut self) {
         let mut command = String::new();
         io::stdin().read_line(&mut command).unwrap();
-        self.parse_command(&mut command);
+        self.parse_command(command);
     }
-    fn parse_command(&mut self, full_command: &String) {
+    fn parse_command(&mut self, full_command: String) {
         let command = full_command.split_whitespace().collect::<Vec<&str>>()[0];
         match command {
             "uci" => self.identify(),
@@ -56,7 +56,7 @@ impl UCI {
         println!("id name vilhelm lindell");
         println!("uciok");
     }
-    fn register(&self, command: &String) {
+    fn register(&self, command: String) {
         //let words = command.split_whitespace();
         //words.next();
         //while let token = words.next() {
@@ -66,7 +66,7 @@ impl UCI {
         //    }
         //}
     }
-    fn set_debug(&mut self, command: &String) {
+    fn set_debug(&mut self, command: String) {
         if command.ends_with("on") {
             self.is_debug = true;
         } else if command.ends_with("off") {
@@ -76,7 +76,7 @@ impl UCI {
     fn synchronize(&self) {
         println!("readyok");
     }
-    fn set_position(&mut self, command: &String) {
+    fn set_position(&mut self, command: String) {
         let words: Vec<&str> = command.split_whitespace().collect();
         let mut moves_index = 8;
         let mut board = {
@@ -84,8 +84,8 @@ impl UCI {
                 moves_index = 2;
                 Board::start_pos()
             } else if words[1] == "fen" {
-                let fen = &words[2..8].concat();
-                Board::from_fen(fen)
+                let fen = words[2..8].concat();
+                Board::from_fen(&fen)
             } else {
                 return;
             }
@@ -99,14 +99,14 @@ impl UCI {
                 let all_moves = board.generate_moves();
                 all_moves.iter().enumerate().for_each(|(i, val)| {
                     if val.to_string() == mov.to_string() {
-                        board.make_move(&all_moves[i]);
+                        board.make_move(all_moves[i]);
                     }
                 })
             }
         }
         self.board = board;
     }
-    fn go(&mut self, command: &String) {
+    fn go(&mut self, command: String) {
         let mut search_option = SearchOption { depth: 6, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
@@ -131,9 +131,9 @@ impl UCI {
         let mut best_move: Option<Move> = None;
         let moves = self.board.generate_moves();
         for mov in moves {
-            self.board.make_move(&mov);
+            self.board.make_move(mov);
             let score = self.board.alpha_beta_search(i32::MIN + 1, i32::MAX, search_option.depth);
-            self.board.unmake_move(&mov);
+            self.board.unmake_move(mov);
 
             if score < lowest_score {
                 lowest_score = score;
