@@ -1,4 +1,3 @@
-mod app;
 mod attack_tables;
 mod bitboard;
 mod board;
@@ -19,8 +18,8 @@ use std::env;
 
 fn main() {
     env::set_var("RUST_BACKTRACE", "1");
-    for i in 0..7 {
-        println!("Depth: {}, Nodes: {}", i, perft(&i));
+    for i in 1..=2 {
+        println!("Depth: {}, Nodes: {}", i, perft(i));
     }
     //UCI::start();
 }

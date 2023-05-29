@@ -102,10 +102,10 @@ impl PieceType {
         }
     }
     pub fn is_slider(&self) -> bool {
-        match self {
-            PieceType::Bishop | PieceType::Rook | PieceType::Queen => true,
-            _ => false,
-        }
+        matches!(self, PieceType::Bishop | PieceType::Rook | PieceType::Queen)
+    }
+    pub fn promotions() -> [PieceType; 4] {
+        [PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen]
     }
 }
 

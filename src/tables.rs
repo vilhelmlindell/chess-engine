@@ -277,7 +277,6 @@ mod tests {
     }
     #[test]
     fn bishop_magic_bitboards_indexes_correctly() {
-        println!("{}", PAWN_ATTACKS[Side::White][36]);
         assert!(true);
     }
 }

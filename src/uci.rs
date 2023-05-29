@@ -8,7 +8,7 @@ pub struct SearchOption {
     infinite: bool,
 }
 
-pub struct UCI {
+pub struct Uci {
     name: String,
     author: String,
     board: Board,
@@ -16,9 +16,9 @@ pub struct UCI {
     is_running: bool,
 }
 
-impl UCI {
+impl Uci {
     pub fn start() {
-        let mut uci = UCI {
+        let mut uci = Self {
             name: "".to_string(),
             author: "".to_string(),
             board: Board::start_pos(),
@@ -98,7 +98,7 @@ impl UCI {
             for mov in moves {
                 let all_moves = board.generate_moves();
                 all_moves.iter().enumerate().for_each(|(i, val)| {
-                    if val.to_string() == mov.to_string() {
+                    if val.to_string() == *mov.to_string() {
                         board.make_move(all_moves[i]);
                     }
                 })

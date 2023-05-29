@@ -302,7 +302,6 @@ mod tests {
     }
     #[test]
     fn test_between_rays() {
-        println!("{}", BETWEEN_RAYS[60][24]);
         assert!(true);
     }
     #[test]
@@ -313,7 +312,6 @@ mod tests {
     }
     #[test]
     fn test_bishop_magic_bitboards_indexing() {
-        println!("{}", PAWN_ATTACKS[Side::White][36]);
         assert!(true);
     }
 }

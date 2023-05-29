@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use crate::piece::{Piece, PieceType};
 
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum MoveType {
     Normal,
     Castle { kingside: bool },
@@ -13,7 +13,7 @@ pub enum MoveType {
 }
 
 #[non_exhaustive]
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct Move {
     pub from: usize,
     pub to: usize,
