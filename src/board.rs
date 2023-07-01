@@ -276,9 +276,14 @@ impl Board {
         }
     }
     fn move_piece(&mut self, from: usize, to: usize) {
-        let piece = self.squares[from].unwrap();
-        self.set_square(to, piece);
-        self.clear_square(from);
+        if let Some(piece) = self.squares[from] {
+            self.set_square(to, piece);
+            self.clear_square(from);
+        }
+        else {
+            println!("From: {}, To: {}", from, to);
+            panic!("Empty square");
+        }
     }
     fn set_square(&mut self, square: usize, piece: Piece) {
         self.occupied_squares.set_bit(square);
@@ -442,6 +447,24 @@ impl Default for BoardState {
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_make_unmake() {
+        let mut board = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - ");
+        let moves = board.generate_moves();
+
+        println!("{}", board);
+        for mov in moves {
+            board.make_move(mov);
+            println!("{}", board);
+            //let new_moves = board.generate_moves();
+            //for new_move in new_moves {
+            //    board.make_move(new_move);
+            //    board.unmake_move(new_move);
+            //}
+            board.unmake_move(mov);
+        }
+        assert!(true)
+    }
     #[test]
     fn load_fen_sets_correct_squares() {
         let mut squares = [Option::<Piece>::None; 64];

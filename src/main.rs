@@ -18,8 +18,9 @@ use std::env;
 
 fn main() {
     env::set_var("RUST_BACKTRACE", "1");
-    for i in 1..=2 {
-        println!("Depth: {}, Nodes: {}", i, perft(i));
+    for i in 1..=1 {
+        println!("Depth: {}", i);
+        println!("{}", perft(i));
     }
     //UCI::start();
 }

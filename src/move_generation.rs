@@ -258,7 +258,10 @@ mod tests {
         board.generate_knight_moves(&mut moves);
         assert_eq!(moves.len(), 4);
     }
-    fn test_castling_moves() {}
+    #[test]
+    fn test_castling_moves() {
+        
+    }
     #[test]
     fn test_move_legality() {
         let board = Board::from_fen("4k3/8/4q3/8/8/4R3/8/4K3 w - - 0 1");
