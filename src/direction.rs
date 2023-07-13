@@ -69,6 +69,34 @@ impl Direction {
             Side::Black => Direction::North,
         }
     }
+    pub fn from_squares(square1: usize, square2: usize) -> Direction {
+        let change = square1 as i32 - square2 as i32;
+        if change > 0 {
+            if change % 9 == 0 {
+                return Direction::NorthWest;
+            } else if change % 7 == 0 {
+                return Direction::NorthEast;
+            } else if change % 8 == 0 {
+                return Direction::North;
+            }
+        } else if change % 9 == 0 {
+            return Direction::SouthEast;
+        } else if change % 7 == 0 {
+            return Direction::SouthWest;
+        } else if change % 8 == 0 {
+            return Direction::South;
+        }
+        let rank1 = square1 / 8;
+        let rank2 = square2 / 8;
+        if rank1 == rank2 {
+            if square1 < square2 {
+                return Direction::West;
+            } else {
+                return Direction::East;
+            }
+        }
+        Direction::North
+    }
 }
 
 impl<T, const N: usize> Index<Direction> for [T; N] {

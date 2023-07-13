@@ -95,9 +95,9 @@ fn precompute_line_rays() -> [[Bitboard; 64]; 64] {
     for square in 0..64 {
         let mut square_line_rays = [Bitboard(0); 64];
         for direction in Direction::all() {
-            for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
+            for squares_to_edge in 1..=SQUARES_TO_EDGE[square][direction] {
                 let end_square = (square as i32 + direction.value() * squares_to_edge as i32) as usize;
-                square_line_rays[end_square] = ATTACK_RAYS[square][direction] | ATTACK_RAYS[square][direction.opposite()] | Bitboard(square as u64);
+                square_line_rays[end_square] = ATTACK_RAYS[square][direction] | ATTACK_RAYS[square][direction.opposite()] | Bitboard::from_square(square);
             }
         }
         line_rays[square] = square_line_rays;

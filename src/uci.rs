@@ -1,6 +1,7 @@
 use std::io;
 
 use crate::board::Board;
+use crate::perft::perft;
 use crate::piece_move::Move;
 
 pub struct SearchOption {
@@ -84,7 +85,7 @@ impl Uci {
                 moves_index = 2;
                 Board::start_pos()
             } else if words[1] == "fen" {
-                let fen = words[2..8].concat();
+                let fen = words[2..8].join(" ");
                 Board::from_fen(&fen)
             } else {
                 return;
@@ -107,11 +108,15 @@ impl Uci {
         self.board = board;
     }
     fn go(&mut self, command: String) {
-        let mut search_option = SearchOption { depth: 6, infinite: false };
+        let mut search_option = SearchOption { depth: 4, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
         while let Some(token) = words.next() {
             match token {
+                "perft" => {
+                    perft(&self.board.fen(), words.next().unwrap_or("1").parse().unwrap());
+                    return;
+                }
                 "infinite" => search_option.infinite = true,
                 "depth" => {
                     if let Some(depth_string) = words.next() {
@@ -125,6 +130,7 @@ impl Uci {
         }
         let best_move = self.search(search_option);
         println!("bestmove {best_move}");
+        println!("{}", self.board.material_balance);
     }
     fn search(&mut self, search_option: SearchOption) -> Move {
         let mut lowest_score = i32::MAX;
