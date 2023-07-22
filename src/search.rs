@@ -1,8 +1,28 @@
-use crate::evaluation;
-use crate::move_generation;
 use crate::{board::Board, piece_move::Move};
 
+pub struct SearchOption {
+    pub depth: u32,
+    pub infinite: bool,
+}
+
 impl Board {
+    pub fn search(&mut self, search_option: SearchOption) -> Move {
+        let mut highest_score = i32::MIN;
+        let mut best_move: Option<Move> = None;
+        let moves = self.generate_moves();
+        for mov in moves {
+            self.make_move(mov);
+            let score = self.alpha_beta_search(i32::MIN, i32::MAX, search_option.depth - 1);
+            println!("{mov} : {score}");
+            self.unmake_move(mov);
+
+            if score > highest_score {
+                highest_score = score;
+                best_move = Some(mov);
+            }
+        }
+        best_move.unwrap()
+    }
     pub fn alpha_beta_search(&mut self, mut alpha: i32, beta: i32, depth_left: u32) -> i32 {
         if depth_left == 0 {
             //return self.quiescense_search(alpha, beta);

@@ -4,11 +4,7 @@ use std::time::Instant;
 use crate::board::Board;
 use crate::perft::perft;
 use crate::piece_move::Move;
-
-pub struct SearchOption {
-    depth: u32,
-    infinite: bool,
-}
+use crate::search::*;
 
 pub struct Uci {
     name: String,
@@ -109,7 +105,7 @@ impl Uci {
         self.board = board;
     }
     fn go(&mut self, command: String) {
-        let mut search_option = SearchOption { depth: 5, infinite: false };
+        let mut search_option = SearchOption { depth: 1, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
         while let Some(token) = words.next() {
@@ -135,28 +131,12 @@ impl Uci {
             }
         }
         let start = Instant::now();
-        let best_move = self.search(search_option);
+        let best_move = self.board.search(search_option);
         println!("bestmove {best_move}");
         println!("Material balance: {}", self.board.material_balance);
         println!("Position balance: {}", self.board.position_balance);
         println!("Time elapsed: {}", start.elapsed().as_millis());
         //println!("{}", self.board.material_balance);
-    }
-    fn search(&mut self, search_option: SearchOption) -> Move {
-        let mut lowest_score = i32::MAX;
-        let mut best_move: Option<Move> = None;
-        let moves = self.board.generate_moves();
-        for mov in moves {
-            self.board.make_move(mov);
-            let score = self.board.alpha_beta_search(i32::MIN, i32::MAX, search_option.depth);
-            self.board.unmake_move(mov);
-
-            if score < lowest_score {
-                lowest_score = score;
-                best_move = Some(mov);
-            }
-        }
-        best_move.unwrap()
     }
     fn ponder(&self) {}
     fn quit(&mut self) {

@@ -197,7 +197,6 @@ impl Board {
     }
     pub fn make_move(&mut self, mov: Move) {
         let mut state = BoardState::from_state(self.state());
-        let mut material_change = 0;
 
         if mov.from == 0 || mov.from == 4 || mov.to == 0 {
             state.castling_rights[Side::Black].queenside = false;
@@ -214,7 +213,6 @@ impl Board {
 
         if let Some(captured_piece) = self.squares[mov.to] {
             self.clear_square(mov.to);
-            material_change += captured_piece.piece_type().centipawns();
             state.captured_piece = Some(captured_piece);
         }
 
@@ -238,20 +236,16 @@ impl Board {
                 let piece = Piece::new(piece_type, self.side_to_move);
                 self.clear_square(mov.to);
                 self.set_square(mov.to, piece);
-                material_change += piece_type.centipawns();
-                material_change -= PieceType::Pawn.centipawns();
             }
             MoveType::EnPassant => {
                 let en_passant_square = self.state().en_passant_square.unwrap();
                 let capture_square = (en_passant_square as i32 + Direction::down(self.side_to_move).value()) as usize;
                 let captured_piece = self.squares[capture_square].unwrap();
-                material_change += captured_piece.piece_type().centipawns();
                 self.clear_square(capture_square);
                 state.captured_piece = Some(captured_piece);
             }
         }
 
-        self.material_balance += material_change * self.side_to_move.factor();
         self.side_to_move = self.side_to_move.enemy();
         self.absolute_pinned_squares = self.absolute_pins();
         self.states.push(state);
@@ -260,13 +254,11 @@ impl Board {
         self.side_to_move = self.side_to_move.enemy();
 
         self.move_piece(mov.to, mov.from);
-        let mut material_change = 0;
 
         // Restore the captured piece, if any
         if mov.move_type != MoveType::EnPassant {
             if let Some(piece) = self.state_mut().captured_piece {
                 self.set_square(mov.to, piece);
-                material_change -= piece.piece_type().centipawns();
             }
         }
 
@@ -282,12 +274,10 @@ impl Board {
         }
 
         // Restore a pawn that was promoted to a non-pawn piece
-        if let MoveType::Promotion(promotion) = mov.move_type {
+        if let MoveType::Promotion(_) = mov.move_type {
             let pawn = Piece::new(PieceType::Pawn, self.side_to_move);
             self.clear_square(mov.from);
             self.set_square(mov.from, pawn);
-            self.material_balance -= promotion.centipawns();
-            self.material_balance += pawn.piece_type().centipawns();
         }
 
         // Restore a captured pawn in an en passant capture
@@ -295,10 +285,10 @@ impl Board {
             let square = (self.states[self.states.len() - 2].en_passant_square.unwrap() as i32 + Direction::down(self.side_to_move).value()) as usize;
             let captured_pawn = Piece::new(PieceType::Pawn, self.side_to_move.enemy());
             self.set_square(square, captured_pawn);
-            self.material_balance -= captured_pawn.piece_type().centipawns();
+            //self.material_balance -= captured_pawn.piece_type().centipawns();
         }
 
-        self.material_balance += material_change * self.side_to_move.factor();
+        //self.material_balance += material_change * self.side_to_move.factor();
         self.absolute_pinned_squares = self.absolute_pins();
         self.states.pop();
     }
@@ -395,6 +385,7 @@ impl Board {
         self.piece_squares[piece].set_bit(square);
         self.squares[square] = Some(piece);
         self.position_balance += position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
     }
     #[inline(always)]
     fn clear_square(&mut self, square: usize) {
@@ -404,6 +395,7 @@ impl Board {
         self.piece_squares[piece].clear_bit(square);
         self.squares[square] = None;
         self.position_balance -= position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
     }
     #[inline(always)]
     fn absolute_pins(&self) -> Bitboard {
