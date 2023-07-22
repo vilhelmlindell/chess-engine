@@ -148,7 +148,7 @@ impl Uci {
         let moves = self.board.generate_moves();
         for mov in moves {
             self.board.make_move(mov);
-            let score = self.board.alpha_beta_search(i32::MIN + 1, i32::MAX, search_option.depth);
+            let score = self.board.alpha_beta_search(i32::MIN, i32::MAX, search_option.depth);
             self.board.unmake_move(mov);
 
             if score < lowest_score {

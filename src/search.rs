@@ -5,7 +5,8 @@ use crate::{board::Board, piece_move::Move};
 impl Board {
     pub fn alpha_beta_search(&mut self, mut alpha: i32, beta: i32, depth_left: u32) -> i32 {
         if depth_left == 0 {
-            return self.quiescense_search(alpha, beta);
+            //return self.quiescense_search(alpha, beta);
+            return self.evaluate();
         }
         for mov in self.generate_moves() {
             self.make_move(mov);
