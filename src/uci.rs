@@ -1,4 +1,5 @@
 use std::io;
+use std::time::Instant;
 
 use crate::board::Board;
 use crate::perft::perft;
@@ -108,13 +109,18 @@ impl Uci {
         self.board = board;
     }
     fn go(&mut self, command: String) {
-        let mut search_option = SearchOption { depth: 4, infinite: false };
+        let mut search_option = SearchOption { depth: 5, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
         while let Some(token) = words.next() {
             match token {
                 "perft" => {
-                    println!("{}", perft(&self.board.fen(), words.next().unwrap_or("1").parse().unwrap()));
+                    let start = Instant::now();
+                    let result = perft(&self.board.fen(), words.next().unwrap_or("1").parse().unwrap());
+                    println!("Nodes: {}", result.nodes);
+                    let seconds = start.elapsed().as_secs_f32();
+                    println!("Time elapsed: {}", seconds);
+                    println!("Nps: {}", result.nodes as f32 / seconds);
                     return;
                 }
                 "infinite" => search_option.infinite = true,
@@ -128,9 +134,13 @@ impl Uci {
                 _ => {}
             }
         }
+        let start = Instant::now();
         let best_move = self.search(search_option);
         println!("bestmove {best_move}");
-        println!("{}", self.board.material_balance);
+        println!("Material balance: {}", self.board.material_balance);
+        println!("Position balance: {}", self.board.position_balance);
+        println!("Time elapsed: {}", start.elapsed().as_millis());
+        //println!("{}", self.board.material_balance);
     }
     fn search(&mut self, search_option: SearchOption) -> Move {
         let mut lowest_score = i32::MAX;

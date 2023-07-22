@@ -245,6 +245,7 @@ impl Board {
             }
         }
     }
+    #[inline(always)]
     fn can_castle(&self, squares: Bitboard, king_squares: [usize; 2]) -> bool {
         // Check if all squares are unoccupied and not attacked
         let is_blocked = squares & self.occupied_squares != 0;
@@ -259,9 +260,18 @@ impl Board {
             let mut attack_ray = BETWEEN_RAYS[king_square][attacker_square] ^ Bitboard::from_square(attacker_square);
 
             let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)];
-            let pushed_pawns = push_pawns(pawns, !self.occupied_squares, self.side_to_move);
-            let mut promoted_pawns = if self.side_to_move == Side::White { pushed_pawns & RANK_7 } else { pushed_pawns & RANK_2 };
-            if promoted_pawns != 0 {}
+            let mut pushed_pawns = push_pawns(pawns, !self.occupied_squares, self.side_to_move);
+            let promoting_pawns = pushed_pawns & (RANK_1 & RANK_8);
+            if promoting_pawns != 0 {
+                pushed_pawns ^= promoting_pawns;
+                for piece_type in PieceType::promotions() {
+                    self.add_moves_from_bitboard(
+                        promoting_pawns & attack_ray,
+                        |to| Move::new((to as i32 + Direction::down(self.side_to_move).value()) as usize, to, MoveType::Promotion(piece_type)),
+                        moves,
+                    );
+                }
+            }
             let rank = if self.side_to_move == Side::White { RANK_3 } else { RANK_6 };
             let double_pushed_pawns = push_pawns(pushed_pawns & rank, !self.occupied_squares, self.side_to_move);
             self.add_moves_from_bitboard(
@@ -298,8 +308,7 @@ impl Board {
 
         // try capturing the checker
         let mut capturers = self.attackers(attacker_square, self.side_to_move.enemy());
-        // THIS ISNT WORKING
-        let promoting_pawns = (capturers & self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)]) & (RANK_2 | RANK_7);
+        let promoting_pawns = (capturers & self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)]) & if self.side_to_move == Side::White { RANK_7 } else { RANK_2 };
         if promoting_pawns != 0 {
             capturers ^= promoting_pawns;
             for piece_type in PieceType::promotions() {
@@ -308,6 +317,7 @@ impl Board {
         }
         self.add_moves_from_bitboard(capturers, |from| Move::new(from, attacker_square, MoveType::Normal), moves);
     }
+    #[inline(always)]
     fn add_moves_from_bitboard<F: Fn(usize) -> Move>(&self, bitboard: Bitboard, mov: F, moves: &mut Vec<Move>) {
         for to in bitboard {
             let mov = mov(to);
@@ -316,6 +326,7 @@ impl Board {
             }
         }
     }
+    #[inline(always)]
     fn legal(&self, mov: Move) -> bool {
         // a non king move is only legal if the piece isn't pinned or it's moving along the ray
         // between the piece and the king

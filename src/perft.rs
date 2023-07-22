@@ -11,15 +11,15 @@ use std::ops::Add;
 
 #[derive(Default, Clone, Copy)]
 pub struct PerftResult {
-    nodes: u32,
-    captures: u32,
-    en_passants: u32,
-    castles: u32,
-    promotions: u32,
-    checks: u32,
-    discovered_checks: u32,
-    double_checks: u32,
-    checkmates: u32,
+    pub nodes: u32,
+    pub captures: u32,
+    pub en_passants: u32,
+    pub castles: u32,
+    pub promotions: u32,
+    pub checks: u32,
+    pub discovered_checks: u32,
+    pub double_checks: u32,
+    pub checkmates: u32,
 }
 
 impl Add for PerftResult {

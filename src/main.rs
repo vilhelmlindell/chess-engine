@@ -13,9 +13,6 @@ mod piece_square_tables;
 mod search;
 mod uci;
 
-use board::Board;
-use move_generation::*;
-use perft::perft;
 use std::env;
 use uci::Uci;
 

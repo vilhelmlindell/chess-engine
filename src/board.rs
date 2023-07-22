@@ -3,7 +3,7 @@ use crate::bitboard::Bitboard;
 use crate::direction::Direction;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::{Move, MoveType};
-use crate::piece_square_tables::positional_value;
+use crate::piece_square_tables::position_value;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
@@ -29,7 +29,7 @@ pub struct Board {
     pub absolute_pinned_squares: Bitboard,
     pub states: Vec<BoardState>,
     pub material_balance: i32,
-    pub positional_balance: i32,
+    pub position_balance: i32,
 }
 
 impl Board {
@@ -44,7 +44,7 @@ impl Board {
             absolute_pinned_squares: Bitboard(0),
             states: vec![BoardState::default()],
             material_balance: 0,
-            positional_balance: 0,
+            position_balance: 0,
         }
     }
     pub fn from_fen(fen: &str) -> Self {
@@ -322,6 +322,7 @@ impl Board {
         }
         false
     }
+    #[inline(always)]
     pub fn attackers(&self, square: usize, side: Side) -> Bitboard {
         let mut attackers = Bitboard(0);
 
@@ -362,6 +363,7 @@ impl Board {
         }
         false
     }
+    #[inline(always)]
     pub fn aligned(square1: usize, square2: usize, square3: usize) -> bool {
         LINE_RAYS[square1][square2] & Bitboard::from_square(square3) != 0
     }
@@ -379,27 +381,31 @@ impl Board {
             }
         }
     }
+    #[inline(always)]
     fn move_piece(&mut self, from: usize, to: usize) {
         let piece = self.squares[from].unwrap();
         self.set_square(to, piece);
         self.clear_square(from);
     }
 
+    #[inline(always)]
     fn set_square(&mut self, square: usize, piece: Piece) {
         self.occupied_squares.set_bit(square);
         self.side_squares[piece.side()].set_bit(square); // Update kingside castling right
         self.piece_squares[piece].set_bit(square);
         self.squares[square] = Some(piece);
-        self.positional_balance += positional_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.position_balance += position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
     }
+    #[inline(always)]
     fn clear_square(&mut self, square: usize) {
         let piece = self.squares[square].unwrap();
         self.occupied_squares.clear_bit(square);
         self.side_squares[piece.side()].clear_bit(square);
         self.piece_squares[piece].clear_bit(square);
         self.squares[square] = None;
-        self.positional_balance -= positional_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.position_balance -= position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
     }
+    #[inline(always)]
     fn absolute_pins(&self) -> Bitboard {
         let king_square = self.piece_squares[Piece::new(PieceType::King, self.side_to_move)].lsb();
 
@@ -422,11 +428,13 @@ impl Board {
 
         pinned_squares
     }
+    #[inline(always)]
     fn xray_rook_attacks(&self, square: usize, blockers: Bitboard) -> Bitboard {
         let attacks = rook_attacks(square, self.occupied_squares);
         let attacked_blockers = blockers & attacks;
         attacks ^ rook_attacks(square, self.occupied_squares ^ attacked_blockers)
     }
+    #[inline(always)]
     pub fn xray_bishop_attacks(&self, square: usize, blockers: Bitboard) -> Bitboard {
         let attacks = bishop_attacks(square, self.occupied_squares);
         let attacked_blockers = blockers & attacks;
