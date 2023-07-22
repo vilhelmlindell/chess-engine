@@ -20,11 +20,11 @@ const RANKS: [Bitboard; 8] = [RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RA
 
 pub const WHITE_KINGSIDE_SQUARES: Bitboard = Bitboard(0x06000000000000000);
 pub const WHITE_KINGSIDE_KING_SQUARES: [usize; 2] = [61, 62];
-pub const WHITE_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x0C00000000000000);
+pub const WHITE_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x0E00000000000000);
 pub const WHITE_QUEENSIDE_KING_SQUARES: [usize; 2] = [59, 58];
 pub const BLACK_KINGSIDE_SQUARES: Bitboard = Bitboard(0x0000000000000060);
 pub const BLACK_KINGSIDE_KING_SQUARES: [usize; 2] = [5, 6];
-pub const BLACK_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x000000000000000C);
+pub const BLACK_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x000000000000000E);
 pub const BLACK_QUEENSIDE_KING_SQUARES: [usize; 2] = [3, 2];
 
 fn push_pawns(pawns: Bitboard, empty_squares: Bitboard, side_to_move: Side) -> Bitboard {
@@ -33,7 +33,7 @@ fn push_pawns(pawns: Bitboard, empty_squares: Bitboard, side_to_move: Side) -> B
 
 impl Board {
     pub fn generate_moves(&self) -> Vec<Move> {
-        let mut moves = Vec::<Move>::new();
+        let mut moves = Vec::<Move>::with_capacity(250);
 
         self.generate_king_moves(&mut moves);
 
@@ -58,6 +58,7 @@ impl Board {
         self.generate_rook_moves(&mut moves);
         self.generate_queen_moves(&mut moves);
         self.generate_castling_moves(&mut moves);
+
         moves
     }
     fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
@@ -259,6 +260,8 @@ impl Board {
 
             let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)];
             let pushed_pawns = push_pawns(pawns, !self.occupied_squares, self.side_to_move);
+            let mut promoted_pawns = if self.side_to_move == Side::White { pushed_pawns & RANK_7 } else { pushed_pawns & RANK_2 };
+            if promoted_pawns != 0 {}
             let rank = if self.side_to_move == Side::White { RANK_3 } else { RANK_6 };
             let double_pushed_pawns = push_pawns(pushed_pawns & rank, !self.occupied_squares, self.side_to_move);
             self.add_moves_from_bitboard(
@@ -287,8 +290,22 @@ impl Board {
             }
         }
 
+        if let Some(to) = self.state().en_passant_square {
+            if (to as i32 + Direction::down(self.side_to_move).value()) as usize == attacker_square {
+                self.generate_en_passant_moves(moves);
+            }
+        }
+
         // try capturing the checker
-        let capturers = self.attackers(attacker_square, self.side_to_move.enemy());
+        let mut capturers = self.attackers(attacker_square, self.side_to_move.enemy());
+        // THIS ISNT WORKING
+        let promoting_pawns = (capturers & self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)]) & (RANK_2 | RANK_7);
+        if promoting_pawns != 0 {
+            capturers ^= promoting_pawns;
+            for piece_type in PieceType::promotions() {
+                self.add_moves_from_bitboard(promoting_pawns, |from| Move::new(from, attacker_square, MoveType::Promotion(piece_type)), moves);
+            }
+        }
         self.add_moves_from_bitboard(capturers, |from| Move::new(from, attacker_square, MoveType::Normal), moves);
     }
     fn add_moves_from_bitboard<F: Fn(usize) -> Move>(&self, bitboard: Bitboard, mov: F, moves: &mut Vec<Move>) {

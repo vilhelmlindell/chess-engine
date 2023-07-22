@@ -114,7 +114,7 @@ impl Uci {
         while let Some(token) = words.next() {
             match token {
                 "perft" => {
-                    perft(&self.board.fen(), words.next().unwrap_or("1").parse().unwrap());
+                    println!("{}", perft(&self.board.fen(), words.next().unwrap_or("1").parse().unwrap()));
                     return;
                 }
                 "infinite" => search_option.infinite = true,

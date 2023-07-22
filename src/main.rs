@@ -21,7 +21,5 @@ use uci::Uci;
 
 fn main() {
     env::set_var("RUST_BACKTRACE", "1");
-    //let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    //println!("{}", board.fen());
     Uci::start();
 }

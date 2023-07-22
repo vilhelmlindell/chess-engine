@@ -69,18 +69,19 @@ impl Board {
                 let square = rank * 8 + file;
                 if let Some(piece) = self.squares[square] {
                     if empty != 0 {
-                        fen.push(char::from_u32(empty).unwrap());
+                        fen.push(char::from_digit(empty, 10).unwrap());
                     }
                     let mut piece_char = *piece_types.get(&piece.piece_type()).unwrap();
                     if piece.side() == Side::White {
                         piece_char = piece_char.to_ascii_uppercase();
                     }
                     fen.push(piece_char);
+                    empty = 0;
                 } else {
                     empty += 1;
-                }
-                if empty == 8 {
-                    fen.push('8');
+                    if file == 7 {
+                        fen.push(char::from_digit(empty, 10).unwrap());
+                    }
                 }
             }
             if rank != 7 {
@@ -112,7 +113,7 @@ impl Board {
             let rank = square / 8;
             let file = square % 8;
             square_string.push(*files.as_bytes().get(file).unwrap() as char);
-            square_string.push(char::from_u32(8 - rank as u32).unwrap());
+            square_string.push(char::from_digit(8 - rank as u32, 10).unwrap());
             fen.push_str(&square_string);
         } else {
             fen.push('-');
@@ -198,12 +199,6 @@ impl Board {
         let mut state = BoardState::from_state(self.state());
         let mut material_change = 0;
 
-        if let Some(piece) = self.squares[mov.to] {
-            if piece.piece_type() == PieceType::King {
-                println!("{}", self);
-                println!("{mov}");
-            }
-        }
         if mov.from == 0 || mov.from == 4 || mov.to == 0 {
             state.castling_rights[Side::Black].queenside = false;
         }
@@ -256,9 +251,9 @@ impl Board {
             }
         }
 
-        self.absolute_pinned_squares = self.absolute_pins();
         self.material_balance += material_change * self.side_to_move.factor();
         self.side_to_move = self.side_to_move.enemy();
+        self.absolute_pinned_squares = self.absolute_pins();
         self.states.push(state);
     }
     pub fn unmake_move(&mut self, mov: Move) {
@@ -289,7 +284,7 @@ impl Board {
         // Restore a pawn that was promoted to a non-pawn piece
         if let MoveType::Promotion(promotion) = mov.move_type {
             let pawn = Piece::new(PieceType::Pawn, self.side_to_move);
-            self.clear_square(mov.to);
+            self.clear_square(mov.from);
             self.set_square(mov.from, pawn);
             self.material_balance -= promotion.centipawns();
             self.material_balance += pawn.piece_type().centipawns();
@@ -385,14 +380,9 @@ impl Board {
         }
     }
     fn move_piece(&mut self, from: usize, to: usize) {
-        if let Some(piece) = self.squares[from] {
-            self.set_square(to, piece);
-            self.clear_square(from);
-        } else {
-            println!("{self}");
-            println!("From: {}, To: {}", from, to);
-            panic!("This shouldnt happen");
-        }
+        let piece = self.squares[from].unwrap();
+        self.set_square(to, piece);
+        self.clear_square(from);
     }
 
     fn set_square(&mut self, square: usize, piece: Piece) {
@@ -607,5 +597,22 @@ mod tests {
         board.unmake_move(mov);
         println!("{board}");
         assert!(true);
+    }
+    #[test]
+    fn make_unmake() {
+        let original = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/1B1PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R b KQkq - 1 1");
+        let mut board = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/1B1PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R b KQkq - 1 1");
+        for mov in board.generate_moves() {
+            board.make_move(mov);
+            board.unmake_move(mov);
+            println!();
+            println!("{original}");
+            println!("{board}");
+
+            for square in 0..64 {
+                assert!(original.squares[square] == board.squares[square]);
+                assert!(original.absolute_pins() == board.absolute_pins());
+            }
+        }
     }
 }
