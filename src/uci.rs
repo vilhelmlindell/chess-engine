@@ -105,7 +105,7 @@ impl Uci {
         self.board = board;
     }
     fn go(&mut self, command: String) {
-        let mut search_option = SearchOption { depth: 1, infinite: false };
+        let mut search_option = SearchOption { depth: 3, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
         while let Some(token) = words.next() {

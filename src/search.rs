@@ -1,4 +1,5 @@
-use crate::{board::Board, piece_move::Move};
+use crate::piece::*;
+use crate::{board::Board, piece::Piece, piece_move::Move};
 
 pub struct SearchOption {
     pub depth: u32,
@@ -10,11 +11,12 @@ impl Board {
         let mut highest_score = i32::MIN;
         let mut best_move: Option<Move> = None;
         let moves = self.generate_moves();
+        //let mov = moves[0];
         for mov in moves {
             self.make_move(mov);
-            let score = self.alpha_beta_search(i32::MIN, i32::MAX, search_option.depth - 1);
-            println!("{mov} : {score}");
+            let score = -self.alpha_beta_search(i32::MIN, i32::MAX, search_option.depth - 1);
             self.unmake_move(mov);
+            println!("{mov}: {score}");
 
             if score > highest_score {
                 highest_score = score;
@@ -28,10 +30,20 @@ impl Board {
             //return self.quiescense_search(alpha, beta);
             return self.evaluate();
         }
-        for mov in self.generate_moves() {
+        let moves = self.generate_moves();
+        if moves.len() == 0 {
+            let king_square = self.piece_squares[Piece::new(PieceType::King, self.side_to_move)].lsb();
+            if self.attacked(king_square) {
+                return i32::MIN;
+            } else {
+                return 0;
+            }
+        }
+        for mov in moves {
             self.make_move(mov);
             let score = -self.alpha_beta_search(-beta, -alpha, depth_left - 1);
             self.unmake_move(mov);
+
             if score >= beta {
                 return beta;
             }
