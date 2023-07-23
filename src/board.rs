@@ -137,6 +137,9 @@ impl Board {
     pub fn state_mut(&mut self) -> &mut BoardState {
         self.states.last_mut().unwrap()
     }
+    pub fn is_capture(&self, mov: Move) -> bool {
+        Option::is_some(&self.squares[mov.to])
+    }
 
     pub fn load_fen(&mut self, fen: &str) {
         let piece_types = HashMap::from([
