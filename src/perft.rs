@@ -108,8 +108,8 @@ fn get_move_info(mov: Move, board: &mut Board, extra_info: bool) -> PerftResult 
         if let MoveType::Promotion(_) = mov.move_type {
             info.promotions = 1;
         }
-        let king_square = board.piece_squares[Piece::new(PieceType::King, board.side_to_move)].lsb();
-        let mut attackers = board.attackers(king_square, board.side_to_move);
+        let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
+        let mut attackers = board.attackers(king_square, board.side);
         if attackers.count_ones() > 0 {
             info.checks = 1;
             while attackers != 0 {

@@ -63,6 +63,17 @@ mod unformatted {
          20, 30, 10,  0,  0, 10, 30, 20
     ];
 
+    pub const CENTER_DISTANCE_TABLE: [i32; 64] = [
+         6, 5, 4, 3, 3, 4, 5, 6,
+         5, 4, 3, 2, 2, 3, 4, 5,
+         4, 3, 2, 1, 1, 2, 3, 4,
+         3, 2, 1, 0, 0, 1, 2, 3,
+         3, 2, 1, 0, 0, 1, 2, 3,
+         4, 3, 2, 1, 1, 2, 3, 4,
+         5, 4, 3, 2, 2, 3, 4, 5,
+         6, 5, 4, 3, 3, 4, 5, 6
+    ];
+
     const PIECE_SQUARE_TABLES: [[i32; 64]; 6] = [PAWN_SQUARE_TABLE, KNIGHT_SQUARE_TABLE, BISHOP_SQUARE_TABLE, ROOK_SQUARE_TABLE, QUEEN_SQUARE_TABLE, KING_SQUARE_TABLE];
 
     pub fn position_value(piece_type: PieceType, square: usize, side: Side) -> i32 {

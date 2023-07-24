@@ -3,6 +3,7 @@ use crate::bitboard::*;
 use crate::board::Board;
 use crate::board::Side;
 use crate::direction::Direction;
+use crate::move_ordering::*;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::Move;
 use crate::piece_move::MoveType;
@@ -37,8 +38,8 @@ impl Board {
 
         self.generate_king_moves(&mut moves);
 
-        let king_square = self.piece_squares[Piece::new(PieceType::King, self.side_to_move)].lsb();
-        let king_attackers = self.attackers(king_square, self.side_to_move);
+        let king_square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
+        let king_attackers = self.attackers(king_square, self.side);
         let num_attackers = king_attackers.count_ones();
 
         match num_attackers.cmp(&1) {
@@ -59,41 +60,38 @@ impl Board {
         self.generate_queen_moves(&mut moves);
         self.generate_castling_moves(&mut moves);
 
+        moves.sort_by(|a, b| self.compare_moves(*a, *b));
         moves
     }
     fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
-        let up_left: Direction = match self.side_to_move {
+        let up_left: Direction = match self.side {
             Side::White => Direction::NorthWest,
             Side::Black => Direction::SouthEast,
         };
-        let up_right: Direction = match self.side_to_move {
+        let up_right: Direction = match self.side {
             Side::White => Direction::NorthEast,
             Side::Black => Direction::SouthWest,
         };
-        let bitboard = self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)];
+        let bitboard = self.piece_squares[Piece::new(PieceType::Pawn, self.side)];
 
-        let mut pushed_pawns = push_pawns(bitboard, !self.occupied_squares, self.side_to_move);
-        let rank = if self.side_to_move == Side::White { RANK_3 } else { RANK_6 };
-        let double_pushed_pawns = push_pawns(pushed_pawns & rank, !self.occupied_squares, self.side_to_move);
+        let mut pushed_pawns = push_pawns(bitboard, !self.occupied_squares, self.side);
+        let rank = if self.side == Side::White { RANK_3 } else { RANK_6 };
+        let double_pushed_pawns = push_pawns(pushed_pawns & rank, !self.occupied_squares, self.side);
 
         let mut promoted_pawns = pushed_pawns & (RANK_1 | RANK_8);
         pushed_pawns ^= promoted_pawns;
 
-        self.add_moves_from_bitboard(
-            pushed_pawns,
-            |to| Move::new((to as i32 - Direction::up(self.side_to_move).value()) as usize, to, MoveType::Normal),
-            moves,
-        );
+        self.add_moves_from_bitboard(pushed_pawns, |to| Move::new((to as i32 - Direction::up(self.side).value()) as usize, to, MoveType::Normal), moves);
         self.add_moves_from_bitboard(
             double_pushed_pawns,
-            |to| Move::new((to as i32 - Direction::up(self.side_to_move).value() * 2) as usize, to, MoveType::DoublePush),
+            |to| Move::new((to as i32 - Direction::up(self.side).value() * 2) as usize, to, MoveType::DoublePush),
             moves,
         );
 
         for piece_type in PieceType::promotions() {
             self.add_moves_from_bitboard(
                 promoted_pawns,
-                |to| Move::new((to as i32 - Direction::up(self.side_to_move).value()) as usize, to, MoveType::Promotion(piece_type)),
+                |to| Move::new((to as i32 - Direction::up(self.side).value()) as usize, to, MoveType::Promotion(piece_type)),
                 moves,
             );
         }
@@ -120,7 +118,7 @@ impl Board {
         self.generate_en_passant_moves(moves);
     }
     fn generate_knight_moves(&self, moves: &mut Vec<Move>) {
-        let bitboard = self.piece_squares[Piece::new(PieceType::Knight, self.side_to_move)];
+        let bitboard = self.piece_squares[Piece::new(PieceType::Knight, self.side)];
 
         for from in bitboard {
             let attack_bitboard = KNIGHT_ATTACK_MASKS[from] & !self.friendly_squares();
@@ -128,7 +126,7 @@ impl Board {
         }
     }
     fn generate_bishop_moves(&self, moves: &mut Vec<Move>) {
-        let bitboard = self.piece_squares[Piece::new(PieceType::Bishop, self.side_to_move)];
+        let bitboard = self.piece_squares[Piece::new(PieceType::Bishop, self.side)];
 
         for from in bitboard {
             let attack_bitboard = bishop_attacks(from, self.occupied_squares) & !self.friendly_squares();
@@ -136,7 +134,7 @@ impl Board {
         }
     }
     fn generate_rook_moves(&self, moves: &mut Vec<Move>) {
-        let bitboard = self.piece_squares[Piece::new(PieceType::Rook, self.side_to_move)];
+        let bitboard = self.piece_squares[Piece::new(PieceType::Rook, self.side)];
 
         for from in bitboard {
             let attack_bitboard = rook_attacks(from, self.occupied_squares) & !self.friendly_squares();
@@ -145,7 +143,7 @@ impl Board {
         }
     }
     fn generate_queen_moves(&self, moves: &mut Vec<Move>) {
-        let bitboard = self.piece_squares[Piece::new(PieceType::Queen, self.side_to_move)];
+        let bitboard = self.piece_squares[Piece::new(PieceType::Queen, self.side)];
 
         for from in bitboard {
             let attack_bitboard = queen_attacks(from, self.occupied_squares) & !self.friendly_squares();
@@ -154,8 +152,8 @@ impl Board {
         }
     }
     fn generate_king_moves(&self, moves: &mut Vec<Move>) {
-        let from = self.piece_squares[Piece::new(PieceType::King, self.side_to_move)].lsb();
-        let enemy_king_square = self.piece_squares[Piece::new(PieceType::King, self.side_to_move.enemy())];
+        let from = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
+        let enemy_king_square = self.piece_squares[Piece::new(PieceType::King, self.side.enemy())];
         let attack_bitboard = KING_ATTACK_MASKS[from] & !self.friendly_squares();
 
         for to in attack_bitboard {
@@ -165,7 +163,7 @@ impl Board {
         }
     }
     fn generate_castling_moves(&self, moves: &mut Vec<Move>) {
-        match self.side_to_move {
+        match self.side {
             Side::White => {
                 if self.can_castle(WHITE_KINGSIDE_SQUARES, WHITE_KINGSIDE_KING_SQUARES) && self.state().castling_rights[Side::White].kingside {
                     moves.push(Move::new(60, 62, MoveType::Castle { kingside: true }));
@@ -186,7 +184,7 @@ impl Board {
     }
     fn generate_en_passant_moves(&self, moves: &mut Vec<Move>) {
         if let Some(to) = self.state().en_passant_square {
-            let mut en_passant_pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)] & PAWN_ATTACKS[self.side_to_move][to];
+            let mut en_passant_pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side)] & PAWN_ATTACKS[self.side][to];
 
             if en_passant_pawns == 0 {
                 return;
@@ -207,9 +205,9 @@ impl Board {
                 return;
             }
 
-            let target_square = (to as i32 + Direction::down(self.side_to_move).value()) as usize;
+            let target_square = (to as i32 + Direction::down(self.side).value()) as usize;
             let rank = RANKS[7 - square / 8];
-            let attackers = self.piece_squares[Piece::new(PieceType::Queen, self.side_to_move.enemy())] | self.piece_squares[Piece::new(PieceType::Rook, self.side_to_move.enemy())] & rank;
+            let attackers = self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())] | self.piece_squares[Piece::new(PieceType::Rook, self.side.enemy())] & rank;
 
             if attackers == 0 {
                 let mov = Move::new(square, to, MoveType::EnPassant);
@@ -219,7 +217,7 @@ impl Board {
                 return;
             }
 
-            let king = self.piece_squares[Piece::new(PieceType::King, self.side_to_move)];
+            let king = self.piece_squares[Piece::new(PieceType::King, self.side)];
 
             if king & rank == 0 {
                 let mov = Move::new(square, to, MoveType::EnPassant);
@@ -253,62 +251,62 @@ impl Board {
         !is_blocked && !is_intercepted
     }
     fn resolve_single_check(&self, attacker_square: usize, moves: &mut Vec<Move>) {
-        let king_square = self.piece_squares[Piece::new(PieceType::King, self.side_to_move)].lsb();
+        let king_square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
 
         // if the checker is a slider, we can block the check
         if self.squares[attacker_square].unwrap().piece_type().is_slider() {
             let mut attack_ray = BETWEEN_RAYS[king_square][attacker_square] ^ Bitboard::from_square(attacker_square);
 
-            let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)];
-            let mut pushed_pawns = push_pawns(pawns, !self.occupied_squares, self.side_to_move);
-            let promoting_pawns = pushed_pawns & (RANK_1 & RANK_8);
+            let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side)];
+            let mut pushed_pawns = push_pawns(pawns, !self.occupied_squares, self.side);
+            let promoting_pawns = pushed_pawns & (RANK_1 | RANK_8);
             if promoting_pawns != 0 {
                 pushed_pawns ^= promoting_pawns;
                 for piece_type in PieceType::promotions() {
                     self.add_moves_from_bitboard(
                         promoting_pawns & attack_ray,
-                        |to| Move::new((to as i32 + Direction::down(self.side_to_move).value()) as usize, to, MoveType::Promotion(piece_type)),
+                        |to| Move::new((to as i32 + Direction::down(self.side).value()) as usize, to, MoveType::Promotion(piece_type)),
                         moves,
                     );
                 }
             }
-            let rank = if self.side_to_move == Side::White { RANK_3 } else { RANK_6 };
-            let double_pushed_pawns = push_pawns(pushed_pawns & rank, !self.occupied_squares, self.side_to_move);
+            let rank = if self.side == Side::White { RANK_3 } else { RANK_6 };
+            let double_pushed_pawns = push_pawns(pushed_pawns & rank, !self.occupied_squares, self.side);
             self.add_moves_from_bitboard(
                 pushed_pawns & attack_ray,
-                |to| Move::new((to as i32 + Direction::down(self.side_to_move).value()) as usize, to, MoveType::Normal),
+                |to| Move::new((to as i32 + Direction::down(self.side).value()) as usize, to, MoveType::Normal),
                 moves,
             );
 
             self.add_moves_from_bitboard(
                 double_pushed_pawns & attack_ray,
-                |to| Move::new((to as i32 + Direction::down(self.side_to_move).value() * 2) as usize, to, MoveType::DoublePush),
+                |to| Move::new((to as i32 + Direction::down(self.side).value() * 2) as usize, to, MoveType::DoublePush),
                 moves,
             );
 
             // look for en passant blocks or captures
             if let Some(to) = self.state().en_passant_square {
-                if attack_ray & Bitboard::from_square(to) != 0 || (to as i32 + Direction::down(self.side_to_move).value()) as usize == attacker_square {
+                if attack_ray & Bitboard::from_square(to) != 0 || (to as i32 + Direction::down(self.side).value()) as usize == attacker_square {
                     self.generate_en_passant_moves(moves);
                 }
             }
 
             while attack_ray != 0 {
                 let intercept_square = attack_ray.pop_lsb();
-                let blockers = self.attackers(intercept_square, self.side_to_move.enemy()) & !self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)];
+                let blockers = self.attackers(intercept_square, self.side.enemy()) & !self.piece_squares[Piece::new(PieceType::Pawn, self.side)];
                 self.add_moves_from_bitboard(blockers, |from| Move::new(from, intercept_square, MoveType::Normal), moves);
             }
         }
 
         if let Some(to) = self.state().en_passant_square {
-            if (to as i32 + Direction::down(self.side_to_move).value()) as usize == attacker_square {
+            if (to as i32 + Direction::down(self.side).value()) as usize == attacker_square {
                 self.generate_en_passant_moves(moves);
             }
         }
 
         // try capturing the checker
-        let mut capturers = self.attackers(attacker_square, self.side_to_move.enemy());
-        let promoting_pawns = (capturers & self.piece_squares[Piece::new(PieceType::Pawn, self.side_to_move)]) & if self.side_to_move == Side::White { RANK_7 } else { RANK_2 };
+        let mut capturers = self.attackers(attacker_square, self.side.enemy());
+        let promoting_pawns = (capturers & self.piece_squares[Piece::new(PieceType::Pawn, self.side)]) & if self.side == Side::White { RANK_7 } else { RANK_2 };
         if promoting_pawns != 0 {
             capturers ^= promoting_pawns;
             for piece_type in PieceType::promotions() {
@@ -330,7 +328,7 @@ impl Board {
     fn legal(&self, mov: Move) -> bool {
         // a non king move is only legal if the piece isn't pinned or it's moving along the ray
         // between the piece and the king
-        self.absolute_pinned_squares.bit(mov.from) == 0 || Self::aligned(mov.to, mov.from, self.piece_squares[Piece::new(PieceType::King, self.side_to_move)].lsb())
+        self.absolute_pinned_squares.bit(mov.from) == 0 || Self::aligned(mov.to, mov.from, self.piece_squares[Piece::new(PieceType::King, self.side)].lsb())
     }
 }
 

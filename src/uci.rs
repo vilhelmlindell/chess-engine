@@ -98,6 +98,7 @@ impl Uci {
                 all_moves.iter().enumerate().for_each(|(i, val)| {
                     if val.to_string() == *mov.to_string() {
                         board.make_move(all_moves[i]);
+                        //println!("{}: {}", val.to_string(), self.board.evaluate());
                     }
                 })
             }
@@ -105,7 +106,7 @@ impl Uci {
         self.board = board;
     }
     fn go(&mut self, command: String) {
-        let mut search_option = SearchOption { depth: 7, infinite: false };
+        let mut search_option = SearchOption { depth: 5, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
         while let Some(token) = words.next() {
