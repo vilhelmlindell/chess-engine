@@ -2,22 +2,13 @@ use crate::attack_tables::*;
 use crate::bitboard::*;
 use crate::board::Board;
 use crate::board::Side;
+use crate::board::*;
 use crate::direction::Direction;
 use crate::move_ordering::*;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::Move;
 use crate::piece_move::MoveType;
 use std::cmp::Ordering;
-
-const RANK_1: Bitboard = Bitboard(0xFF00000000000000);
-const RANK_2: Bitboard = Bitboard(0x00FF000000000000);
-const RANK_3: Bitboard = Bitboard(0x0000FF0000000000);
-const RANK_4: Bitboard = Bitboard(0x000000FF00000000);
-const RANK_5: Bitboard = Bitboard(0x00000000FF000000);
-const RANK_6: Bitboard = Bitboard(0x0000000000FF0000);
-const RANK_7: Bitboard = Bitboard(0x000000000000FF00);
-const RANK_8: Bitboard = Bitboard(0x00000000000000FF);
-const RANKS: [Bitboard; 8] = [RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8];
 
 pub const WHITE_KINGSIDE_SQUARES: Bitboard = Bitboard(0x06000000000000000);
 pub const WHITE_KINGSIDE_KING_SQUARES: [usize; 2] = [61, 62];

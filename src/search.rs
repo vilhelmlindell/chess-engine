@@ -1,3 +1,5 @@
+use crate::transposition_table::NodeType;
+use crate::zobrist_hash::get_zobrist_hash;
 use crate::{
     board::{Board, Side},
     piece::{Piece, PieceType},
@@ -60,6 +62,7 @@ impl Board {
                 alpha = score; // Update alpha with the new score
             }
         }
+        self.transposition_table.store(get_zobrist_hash(self), depth, eval, NodeType::Exact);
         alpha
     }
     pub fn quiescense_search(&mut self, mut alpha: i32, beta: i32, root_distance: u32) -> i32 {

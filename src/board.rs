@@ -4,11 +4,22 @@ use crate::direction::Direction;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::{Move, MoveType};
 use crate::piece_square_tables::position_value;
+use crate::transposition_table::*;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+pub const RANK_1: Bitboard = Bitboard(0xFF00000000000000);
+pub const RANK_2: Bitboard = Bitboard(0x00FF000000000000);
+pub const RANK_3: Bitboard = Bitboard(0x0000FF0000000000);
+pub const RANK_4: Bitboard = Bitboard(0x000000FF00000000);
+pub const RANK_5: Bitboard = Bitboard(0x00000000FF000000);
+pub const RANK_6: Bitboard = Bitboard(0x0000000000FF0000);
+pub const RANK_7: Bitboard = Bitboard(0x000000000000FF00);
+pub const RANK_8: Bitboard = Bitboard(0x00000000000000FF);
+pub const RANKS: [Bitboard; 8] = [RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8];
 
 pub fn square_from_string(square: String) -> usize {
     let files = "abcdefgh";
@@ -18,7 +29,7 @@ pub fn square_from_string(square: String) -> usize {
 }
 
 #[non_exhaustive]
-#[derive(Clone)]
+//#[derive(Clone)]
 pub struct Board {
     pub squares: [Option<Piece>; 64],
     pub side: Side,
@@ -30,6 +41,7 @@ pub struct Board {
     pub states: Vec<BoardState>,
     pub material_balance: i32,
     pub position_balance: i32,
+    pub transposition_table: TranspositionTable,
 }
 
 impl Board {
@@ -45,6 +57,7 @@ impl Board {
             states: vec![BoardState::default()],
             material_balance: 0,
             position_balance: 0,
+            transposition_table: TranspositionTable { table: HashMap::new() },
         }
     }
     pub fn from_fen(fen: &str) -> Self {
