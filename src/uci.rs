@@ -106,37 +106,38 @@ impl Uci {
         self.board = board;
     }
     fn go(&mut self, command: String) {
-        let mut search_option = SearchOption { depth: 5, infinite: false };
         let mut words = command.split_whitespace();
         words.next();
         while let Some(token) = words.next() {
             match token {
                 "perft" => {
                     let start = Instant::now();
+                    //println!("{}", self.board.zobrist_hash);
                     let result = perft(&self.board.fen(), words.next().unwrap_or("1").parse().unwrap());
                     println!("Nodes: {}", result.nodes);
                     let seconds = start.elapsed().as_secs_f32();
                     println!("Time elapsed: {}", seconds);
                     println!("Nps: {}", result.nodes as f32 / seconds);
+                    //println!("{}", self.board.zobrist_hash);
                     return;
                 }
-                "infinite" => search_option.infinite = true,
-                "depth" => {
-                    if let Some(depth_string) = words.next() {
-                        if let Ok(depth) = depth_string.parse::<u32>() {
-                            search_option.depth = depth
-                        }
-                    }
-                }
+                //"infinite" => search_option.infinite = true,
+                //"depth" => {
+                //    if let Some(depth_string) = words.next() {
+                //        if let Ok(depth) = depth_string.parse::<u32>() {
+                //            search_option.depth = depth
+                //        }
+                //    }
+                //}
                 _ => {}
             }
         }
         let start = Instant::now();
-        let best_move = self.board.search(search_option);
+        let best_move = self.board.search(2.0);
         println!("bestmove {best_move}");
         println!("Material balance: {}", self.board.material_balance);
         println!("Position balance: {}", self.board.position_balance);
-        println!("Time elapsed: {}", start.elapsed().as_millis());
+        //println!("Time elapsed: {}", start.elapsed().as_millis());
         //println!("{}", self.board.material_balance);
     }
     fn ponder(&self) {}

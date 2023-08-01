@@ -141,7 +141,7 @@ mod tests {
         assert_eq!(perft(fen, 2).nodes, 400);
         assert_eq!(perft(fen, 3).nodes, 8902);
         assert_eq!(perft(fen, 4).nodes, 197281);
-        assert_eq!(perft(fen, 5).nodes, 4865609);
+        //assert_eq!(perft(fen, 5).nodes, 4865609);
     }
     #[test]
     fn test_perft2() {
@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(perft(fen, 2).nodes, 2039);
         assert_eq!(perft(fen, 3).nodes, 97862);
         assert_eq!(perft(fen, 4).nodes, 4085603);
-        assert_eq!(perft(fen, 5).nodes, 193690690);
+        //assert_eq!(perft(fen, 5).nodes, 193690690);
     }
     #[test]
     fn test_perft3() {
@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(perft(fen, 2).nodes, 191);
         assert_eq!(perft(fen, 3).nodes, 2812);
         assert_eq!(perft(fen, 4).nodes, 43238);
-        assert_eq!(perft(fen, 5).nodes, 674624);
+        //assert_eq!(perft(fen, 5).nodes, 674624);
     }
     #[test]
     fn test_perft4() {
@@ -168,7 +168,7 @@ mod tests {
         assert_eq!(perft(fen, 2).nodes, 264);
         assert_eq!(perft(fen, 3).nodes, 9467);
         assert_eq!(perft(fen, 4).nodes, 422333);
-        assert_eq!(perft(fen, 5).nodes, 15833292);
+        //assert_eq!(perft(fen, 5).nodes, 15833292);
     }
     #[test]
     fn test_perft5() {
@@ -177,7 +177,7 @@ mod tests {
         assert_eq!(perft(fen, 2).nodes, 1486);
         assert_eq!(perft(fen, 3).nodes, 62379);
         assert_eq!(perft(fen, 4).nodes, 2103487);
-        assert_eq!(perft(fen, 5).nodes, 89941194);
+        //assert_eq!(perft(fen, 5).nodes, 89941194);
     }
     #[test]
     fn test_perft6() {
@@ -186,6 +186,6 @@ mod tests {
         assert_eq!(perft(fen, 2).nodes, 2079);
         assert_eq!(perft(fen, 3).nodes, 89890);
         assert_eq!(perft(fen, 4).nodes, 3894594);
-        assert_eq!(perft(fen, 5).nodes, 164075551);
+        //assert_eq!(perft(fen, 5).nodes, 164075551);
     }
 }

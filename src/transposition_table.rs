@@ -1,16 +1,33 @@
-use std::collections::HashMap;
+use crate::piece_move::Move;
 
-//#[derive(Clone)]
+pub const TABLE_SIZE: usize = u64::pow(2, 16) as usize - 1;
+
 pub struct TranspositionTable {
-    pub table: HashMap<u64, TranspositionEntry>,
+    pub table: Box<[Option<TranspositionEntry>; TABLE_SIZE]>,
 }
 
+#[derive(Clone, Copy)]
 pub struct TranspositionEntry {
     pub depth: u32,
     pub eval: i32,
+    pub best_move: Move,
     pub node_type: NodeType,
+    pub hash: u64,
 }
 
+impl TranspositionEntry {
+    pub fn new(depth: u32, eval: i32, best_move: Move, node_type: NodeType, hash: u64) -> Self {
+        Self {
+            depth,
+            eval,
+            best_move,
+            node_type,
+            hash,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 pub enum NodeType {
     Exact,
     LowerBound,
@@ -19,14 +36,20 @@ pub enum NodeType {
 
 impl TranspositionTable {
     pub fn new() -> Self {
-        TranspositionTable { table: HashMap::new() }
+        Self { table: Box::new([None; TABLE_SIZE]) }
     }
 
-    pub fn store(&mut self, hash: u64, depth: u32, eval: i32, node_type: NodeType) {
-        self.table.insert(hash, TranspositionEntry { depth, eval, node_type });
+    pub fn store(&mut self, entry: TranspositionEntry) {
+        let index = self.get_index(entry.hash);
+        self.table[index] = Some(entry);
     }
 
-    pub fn probe(&self, hash: u64) -> Option<&TranspositionEntry> {
-        self.table.get(&hash)
+    pub fn probe(&self, hash: u64) -> Option<TranspositionEntry> {
+        let index = self.get_index(hash);
+        self.table[index]
+    }
+
+    fn get_index(&self, hash: u64) -> usize {
+        (hash % (TABLE_SIZE) as u64) as usize
     }
 }

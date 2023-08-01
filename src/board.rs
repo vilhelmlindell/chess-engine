@@ -1,10 +1,11 @@
-use crate::attack_tables::*;
 use crate::bitboard::Bitboard;
 use crate::direction::Direction;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::{Move, MoveType};
 use crate::piece_square_tables::position_value;
 use crate::transposition_table::*;
+use crate::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
+use crate::{attack_tables::*, zobrist_hash};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
@@ -29,7 +30,6 @@ pub fn square_from_string(square: String) -> usize {
 }
 
 #[non_exhaustive]
-//#[derive(Clone)]
 pub struct Board {
     pub squares: [Option<Piece>; 64],
     pub side: Side,
@@ -42,6 +42,7 @@ pub struct Board {
     pub material_balance: i32,
     pub position_balance: i32,
     pub transposition_table: TranspositionTable,
+    pub zobrist_hash: u64,
 }
 
 impl Board {
@@ -57,7 +58,8 @@ impl Board {
             states: vec![BoardState::default()],
             material_balance: 0,
             position_balance: 0,
-            transposition_table: TranspositionTable { table: HashMap::new() },
+            transposition_table: TranspositionTable::new(),
+            zobrist_hash: 0,
         }
     }
     pub fn from_fen(fen: &str) -> Self {
@@ -216,9 +218,12 @@ impl Board {
                 self.position_balance += position_value(piece.piece_type(), square, piece.side()) * piece.side().factor()
             }
         }
+        self.zobrist_hash = get_zobrist_hash(self);
     }
     pub fn make_move(&mut self, mov: Move) {
         let mut state = BoardState::from_state(self.state());
+
+        let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
 
         if mov.from == 0 || mov.from == 4 || mov.to == 0 {
             state.castling_rights[Side::Black].queenside = false;
@@ -232,6 +237,10 @@ impl Board {
         if mov.from == 63 || mov.from == 60 || mov.to == 63 {
             state.castling_rights[Side::White].kingside = false;
         }
+
+        let castling_rights_bits_after = Self::castling_rights_bits(state.castling_rights);
+
+        self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
 
         if let Some(captured_piece) = self.squares[mov.to] {
             self.clear_square(mov.to);
@@ -253,6 +262,12 @@ impl Board {
             }
             MoveType::DoublePush => {
                 state.en_passant_square = Some((mov.to as i32 + Direction::down(self.side).value()) as usize);
+                if let Some(prev_en_passant_square) = self.state().en_passant_square {
+                    let prev_file = prev_en_passant_square % 8;
+                    //self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file]
+                }
+                let file = state.en_passant_square.unwrap() % 8;
+                self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[file];
             }
             MoveType::Promotion(piece_type) => {
                 let piece = Piece::new(piece_type, self.side);
@@ -269,50 +284,68 @@ impl Board {
         }
 
         self.side = self.side.enemy();
+        self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
         self.absolute_pinned_squares = self.absolute_pins();
         self.states.push(state);
     }
     pub fn unmake_move(&mut self, mov: Move) {
         self.side = self.side.enemy();
+        self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
+
+        let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
 
         self.move_piece(mov.to, mov.from);
 
-        // Restore the captured piece, if any
         if mov.move_type != MoveType::EnPassant {
             if let Some(piece) = self.state_mut().captured_piece {
                 self.set_square(mov.to, piece);
             }
         }
 
-        // Undo castling, if necessary
-        if let MoveType::Castle { kingside } = mov.move_type {
-            let (rook_from, rook_to) = match (self.side, kingside) {
-                (Side::White, true) => (61, 63),
-                (Side::White, false) => (59, 56),
-                (Side::Black, true) => (5, 7),
-                (Side::Black, false) => (3, 0),
-            };
-            self.move_piece(rook_from, rook_to);
+        match mov.move_type {
+            MoveType::Castle { kingside } => {
+                let (rook_from, rook_to) = match (self.side, kingside) {
+                    (Side::White, true) => (61, 63),
+                    (Side::White, false) => (59, 56),
+                    (Side::Black, true) => (5, 7),
+                    (Side::Black, false) => (3, 0),
+                };
+                self.move_piece(rook_from, rook_to);
+            }
+            MoveType::DoublePush => {
+                let file = self.state().en_passant_square.unwrap() % 8;
+                self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[file];
+
+                if let Some(prev_en_passant_square) = self.states.last().unwrap().en_passant_square {
+                    let prev_file = prev_en_passant_square % 8;
+                    //self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+                }
+            }
+            MoveType::EnPassant => {
+                let square = (self.states[self.states.len() - 2].en_passant_square.unwrap() as i32 + Direction::down(self.side).value()) as usize;
+                let captured_pawn = Piece::new(PieceType::Pawn, self.side.enemy());
+                self.set_square(square, captured_pawn);
+            }
+            MoveType::Promotion(_) => {
+                let pawn = Piece::new(PieceType::Pawn, self.side);
+                self.clear_square(mov.from);
+                self.set_square(mov.from, pawn);
+            }
+            _ => {}
         }
 
-        // Restore a pawn that was promoted to a non-pawn piece
-        if let MoveType::Promotion(_) = mov.move_type {
-            let pawn = Piece::new(PieceType::Pawn, self.side);
-            self.clear_square(mov.from);
-            self.set_square(mov.from, pawn);
-        }
-
-        // Restore a captured pawn in an en passant capture
-        if mov.move_type == MoveType::EnPassant {
-            let square = (self.states[self.states.len() - 2].en_passant_square.unwrap() as i32 + Direction::down(self.side).value()) as usize;
-            let captured_pawn = Piece::new(PieceType::Pawn, self.side.enemy());
-            self.set_square(square, captured_pawn);
-            //self.material_balance -= captured_pawn.piece_type().centipawns();
-        }
-
-        //self.material_balance += material_change * self.side_to_move.factor();
         self.absolute_pinned_squares = self.absolute_pins();
         self.states.pop();
+
+        let castling_rights_bits_after = Self::castling_rights_bits(self.state().castling_rights);
+
+        self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
+    }
+    fn castling_rights_bits(castling_rights: [CastlingRights; 2]) -> usize {
+        (castling_rights[Side::White].kingside as usize) << 3
+            | (castling_rights[Side::White].queenside as usize) << 2
+            | (castling_rights[Side::Black].kingside as usize) << 1
+            | castling_rights[Side::Black].queenside as usize
     }
     pub fn attacked(&self, square: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
@@ -408,6 +441,7 @@ impl Board {
         self.squares[square] = Some(piece);
         self.position_balance += position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
+        self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
     #[inline(always)]
     fn clear_square(&mut self, square: usize) {
@@ -418,6 +452,7 @@ impl Board {
         self.squares[square] = None;
         self.position_balance -= position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
+        self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
     #[inline(always)]
     fn absolute_pins(&self) -> Bitboard {
@@ -624,6 +659,7 @@ mod tests {
     fn make_unmake() {
         let original = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/1B1PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R b KQkq - 1 1");
         let mut board = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/1B1PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R b KQkq - 1 1");
+        let zobrist_before = board.zobrist_hash;
         for mov in board.generate_moves() {
             board.make_move(mov);
             board.unmake_move(mov);
@@ -636,5 +672,7 @@ mod tests {
                 assert!(original.absolute_pins() == board.absolute_pins());
             }
         }
+        let zobrist_after = board.zobrist_hash;
+        assert_eq!(zobrist_before, zobrist_after);
     }
 }

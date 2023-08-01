@@ -1,4 +1,7 @@
-use crate::board::{Board, Side};
+use crate::{
+    board::{Board, Side},
+    piece_move::Move,
+};
 use once_cell::sync::Lazy;
 use rand::*;
 
@@ -19,7 +22,7 @@ pub fn get_zobrist_hash(board: &Board) -> u64 {
             zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
         }
     }
-    if board.side == Side::White {
+    if board.side == Side::Black {
         zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
     }
     let white_castling = board.state().castling_rights[Side::White];
