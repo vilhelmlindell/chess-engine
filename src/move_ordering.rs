@@ -1,9 +1,11 @@
 use crate::{board::Board, piece_move::Move};
-use crate::{piece, piece_move::*};
 use std::cmp::Ordering;
 
 impl Board {
-    pub fn compare_moves(&self, a: Move, b: Move) -> Ordering {
+    pub fn order_moves(&self, moves: &mut [Move]) {
+        moves.sort_by(|a, b| self.compare_moves(*a, *b));
+    }
+    fn compare_moves(&self, a: Move, b: Move) -> Ordering {
         let is_a_capture = self.is_capture(a);
         let is_b_capture = self.is_capture(b);
 

@@ -4,7 +4,6 @@ use crate::board::Board;
 use crate::board::Side;
 use crate::board::*;
 use crate::direction::Direction;
-use crate::move_ordering::*;
 use crate::piece::{Piece, PieceType};
 use crate::piece_move::Move;
 use crate::piece_move::MoveType;
@@ -51,7 +50,6 @@ impl Board {
         self.generate_queen_moves(&mut moves);
         self.generate_castling_moves(&mut moves);
 
-        moves.sort_by(|a, b| self.compare_moves(*a, *b));
         moves
     }
     fn generate_pawn_moves(&self, moves: &mut Vec<Move>) {
@@ -234,7 +232,6 @@ impl Board {
             }
         }
     }
-    #[inline(always)]
     fn can_castle(&self, squares: Bitboard, king_squares: [usize; 2]) -> bool {
         // Check if all squares are unoccupied and not attacked
         let is_blocked = squares & self.occupied_squares != 0;
@@ -306,7 +303,6 @@ impl Board {
         }
         self.add_moves_from_bitboard(capturers, |from| Move::new(from, attacker_square, MoveType::Normal), moves);
     }
-    #[inline(always)]
     fn add_moves_from_bitboard<F: Fn(usize) -> Move>(&self, bitboard: Bitboard, mov: F, moves: &mut Vec<Move>) {
         for to in bitboard {
             let mov = mov(to);
@@ -315,7 +311,6 @@ impl Board {
             }
         }
     }
-    #[inline(always)]
     fn legal(&self, mov: Move) -> bool {
         // a non king move is only legal if the piece isn't pinned or it's moving along the ray
         // between the piece and the king

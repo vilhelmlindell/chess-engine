@@ -1,3 +1,4 @@
+use crate::attack_tables::*;
 use crate::bitboard::Bitboard;
 use crate::direction::Direction;
 use crate::piece::{Piece, PieceType};
@@ -5,7 +6,6 @@ use crate::piece_move::{Move, MoveType};
 use crate::piece_square_tables::position_value;
 use crate::transposition_table::*;
 use crate::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
-use crate::{attack_tables::*, zobrist_hash};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};

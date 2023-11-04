@@ -49,6 +49,10 @@ impl TranspositionTable {
         self.table[index]
     }
 
+    pub fn clear(&mut self) {
+        *self.table = [None; TABLE_SIZE]
+    }
+
     fn get_index(&self, hash: u64) -> usize {
         (hash % (TABLE_SIZE) as u64) as usize
     }
