@@ -1,7 +1,4 @@
-pub mod attack_tables;
-pub mod book_moves;
-pub mod magic_numbers;
-
+use super::attack_tables::*;
 use crate::board::bitboard::Bitboard;
 use crate::board::direction::Direction;
 use crate::board::piece::{Piece, PieceType};
@@ -10,7 +7,6 @@ use crate::board::piece_move::MoveType;
 use crate::board::Board;
 use crate::board::Side;
 use crate::board::*;
-use attack_tables::*;
 use std::cmp::Ordering;
 
 const WHITE_KINGSIDE_SQUARES: Bitboard = Bitboard(0x06000000000000000);

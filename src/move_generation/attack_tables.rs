@@ -1,6 +1,6 @@
+use crate::board::bitboard::Bitboard;
 use crate::board::direction::Direction;
 use crate::board::Side;
-use crate::move_generation::bitboard::Bitboard;
 use crate::move_generation::magic_numbers::*;
 use once_cell::sync::Lazy;
 use std::cmp::min;

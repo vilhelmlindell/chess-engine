@@ -1,6 +1,3 @@
-pub mod move_ordering;
-pub mod transposition_table;
-
 use crate::board::piece::{Piece, PieceType};
 use crate::board::piece_move::Move;
 use crate::board::Board;

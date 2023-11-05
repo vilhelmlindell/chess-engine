@@ -1,20 +1,14 @@
-pub mod bitboard;
-pub mod direction;
-pub mod piece;
-pub mod piece_move;
-pub mod zobrist_hash;
-
+use super::bitboard::Bitboard;
+use super::direction::Direction;
+use super::piece::{Piece, PieceType};
+use super::piece_move::{Move, MoveType};
+use super::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
 use crate::evaluation::piece_square_tables::position_value;
 use crate::move_generation::attack_tables::*;
 use crate::search::transposition_table::*;
-use bitboard::Bitboard;
-use direction::Direction;
-use piece::{Piece, PieceType};
-use piece_move::{Move, MoveType};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
-use zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 

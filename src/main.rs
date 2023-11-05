@@ -1,9 +1,9 @@
-mod board;
-mod evaluation;
-mod move_generation;
-mod perft;
-mod search;
-mod uci;
+pub mod board;
+pub mod evaluation;
+pub mod move_generation;
+pub mod perft;
+pub mod search;
+pub mod uci;
 
 use std::env;
 use uci::Uci;

@@ -1,6 +1,3 @@
-pub mod book_moves;
-pub mod piece_square_tables;
-
 use crate::board::piece::{Piece, PieceType};
 use crate::board::Board;
 use crate::evaluation::piece_square_tables::*;
