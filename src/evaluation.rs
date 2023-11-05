@@ -1,6 +1,9 @@
+pub mod book_moves;
+pub mod piece_square_tables;
+
+use crate::board::piece::{Piece, PieceType};
 use crate::board::Board;
-use crate::piece::{Piece, PieceType};
-use crate::piece_square_tables::*;
+use crate::evaluation::piece_square_tables::*;
 
 impl Board {
     pub fn evaluate(&self) -> i32 {

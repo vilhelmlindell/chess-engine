@@ -1,22 +1,26 @@
-use crate::attack_tables::*;
-use crate::bitboard::*;
+pub mod attack_tables;
+pub mod book_moves;
+pub mod magic_numbers;
+
+use crate::board::bitboard::Bitboard;
+use crate::board::direction::Direction;
+use crate::board::piece::{Piece, PieceType};
+use crate::board::piece_move::Move;
+use crate::board::piece_move::MoveType;
 use crate::board::Board;
 use crate::board::Side;
 use crate::board::*;
-use crate::direction::Direction;
-use crate::piece::{Piece, PieceType};
-use crate::piece_move::Move;
-use crate::piece_move::MoveType;
+use attack_tables::*;
 use std::cmp::Ordering;
 
-pub const WHITE_KINGSIDE_SQUARES: Bitboard = Bitboard(0x06000000000000000);
-pub const WHITE_KINGSIDE_KING_SQUARES: [usize; 2] = [61, 62];
-pub const WHITE_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x0E00000000000000);
-pub const WHITE_QUEENSIDE_KING_SQUARES: [usize; 2] = [59, 58];
-pub const BLACK_KINGSIDE_SQUARES: Bitboard = Bitboard(0x0000000000000060);
-pub const BLACK_KINGSIDE_KING_SQUARES: [usize; 2] = [5, 6];
-pub const BLACK_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x000000000000000E);
-pub const BLACK_QUEENSIDE_KING_SQUARES: [usize; 2] = [3, 2];
+const WHITE_KINGSIDE_SQUARES: Bitboard = Bitboard(0x06000000000000000);
+const WHITE_KINGSIDE_KING_SQUARES: [usize; 2] = [61, 62];
+const WHITE_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x0E00000000000000);
+const WHITE_QUEENSIDE_KING_SQUARES: [usize; 2] = [59, 58];
+const BLACK_KINGSIDE_SQUARES: Bitboard = Bitboard(0x0000000000000060);
+const BLACK_KINGSIDE_KING_SQUARES: [usize; 2] = [5, 6];
+const BLACK_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x000000000000000E);
+const BLACK_QUEENSIDE_KING_SQUARES: [usize; 2] = [3, 2];
 
 fn push_pawns(pawns: Bitboard, empty_squares: Bitboard, side_to_move: Side) -> Bitboard {
     (pawns.north() << ((side_to_move.value()) << 4)) & empty_squares

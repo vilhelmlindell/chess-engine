@@ -1,9 +1,11 @@
-use std::time::Instant;
+pub mod move_ordering;
+pub mod transposition_table;
 
+use crate::board::piece::{Piece, PieceType};
+use crate::board::piece_move::Move;
 use crate::board::Board;
-use crate::piece::{Piece, PieceType};
-use crate::piece_move::Move;
-use crate::transposition_table::{NodeType, TranspositionEntry};
+use crate::search::transposition_table::{NodeType, TranspositionEntry};
+use std::time::Instant;
 
 const MAX_DEPTH: u32 = 100;
 

@@ -3,8 +3,6 @@ use std::time::Instant;
 
 use crate::board::Board;
 use crate::perft::perft;
-use crate::piece_move::Move;
-use crate::search::*;
 
 pub struct Uci {
     name: String,
@@ -132,13 +130,10 @@ impl Uci {
                 _ => {}
             }
         }
-        let start = Instant::now();
         let best_move = self.board.search(2.0);
         println!("bestmove {best_move}");
         println!("Material balance: {}", self.board.material_balance);
         println!("Position balance: {}", self.board.position_balance);
-        //println!("Time elapsed: {}", start.elapsed().as_millis());
-        //println!("{}", self.board.material_balance);
     }
     fn ponder(&self) {}
     fn quit(&mut self) {

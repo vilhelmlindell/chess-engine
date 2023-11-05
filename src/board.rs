@@ -1,14 +1,20 @@
-use crate::attack_tables::*;
-use crate::bitboard::Bitboard;
-use crate::direction::Direction;
-use crate::piece::{Piece, PieceType};
-use crate::piece_move::{Move, MoveType};
-use crate::piece_square_tables::position_value;
-use crate::transposition_table::*;
-use crate::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
+pub mod bitboard;
+pub mod direction;
+pub mod piece;
+pub mod piece_move;
+pub mod zobrist_hash;
+
+use crate::evaluation::piece_square_tables::position_value;
+use crate::move_generation::attack_tables::*;
+use crate::search::transposition_table::*;
+use bitboard::Bitboard;
+use direction::Direction;
+use piece::{Piece, PieceType};
+use piece_move::{Move, MoveType};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
+use zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -264,7 +270,7 @@ impl Board {
                 state.en_passant_square = Some((mov.to as i32 + Direction::down(self.side).value()) as usize);
                 if let Some(prev_en_passant_square) = self.state().en_passant_square {
                     let prev_file = prev_en_passant_square % 8;
-                    //self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file]
+                    self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
                 }
                 let file = state.en_passant_square.unwrap() % 8;
                 self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[file];
@@ -318,7 +324,7 @@ impl Board {
 
                 if let Some(prev_en_passant_square) = self.states.last().unwrap().en_passant_square {
                     let prev_file = prev_en_passant_square % 8;
-                    //self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+                    self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
                 }
             }
             MoveType::EnPassant => {
@@ -367,7 +373,6 @@ impl Board {
         }
         false
     }
-    #[inline(always)]
     pub fn attackers(&self, square: usize, side: Side) -> Bitboard {
         let mut attackers = Bitboard(0);
 
@@ -408,11 +413,9 @@ impl Board {
         }
         false
     }
-    #[inline(always)]
     pub fn aligned(square1: usize, square2: usize, square3: usize) -> bool {
         LINE_RAYS[square1][square2] & Bitboard::from_square(square3) != 0
     }
-
     fn initialize_bitboards(&mut self) {
         for square in 0..64 {
             if let Some(piece) = self.squares[square] {
@@ -426,14 +429,12 @@ impl Board {
             }
         }
     }
-    #[inline(always)]
     fn move_piece(&mut self, from: usize, to: usize) {
         let piece = self.squares[from].unwrap();
         self.set_square(to, piece);
         self.clear_square(from);
     }
 
-    #[inline(always)]
     fn set_square(&mut self, square: usize, piece: Piece) {
         self.occupied_squares.set_bit(square);
         self.side_squares[piece.side()].set_bit(square); // Update kingside castling right
@@ -443,7 +444,6 @@ impl Board {
         self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
-    #[inline(always)]
     fn clear_square(&mut self, square: usize) {
         let piece = self.squares[square].unwrap();
         self.occupied_squares.clear_bit(square);
@@ -454,7 +454,6 @@ impl Board {
         self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
-    #[inline(always)]
     fn absolute_pins(&self) -> Bitboard {
         let king_square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
 
@@ -477,13 +476,11 @@ impl Board {
 
         pinned_squares
     }
-    #[inline(always)]
     fn xray_rook_attacks(&self, square: usize, blockers: Bitboard) -> Bitboard {
         let attacks = rook_attacks(square, self.occupied_squares);
         let attacked_blockers = blockers & attacks;
         attacks ^ rook_attacks(square, self.occupied_squares ^ attacked_blockers)
     }
-    #[inline(always)]
     pub fn xray_bishop_attacks(&self, square: usize, blockers: Bitboard) -> Bitboard {
         let attacks = bishop_attacks(square, self.occupied_squares);
         let attacked_blockers = blockers & attacks;
@@ -504,7 +501,7 @@ impl Display for Board {
         for rank in 0..8 {
             write!(f, "{}", 8 - rank).unwrap();
             for file in 0..8 {
-                write!(f, "{}", ' ').unwrap();
+                write!(f, " ").unwrap();
                 match self.squares[rank * 8 + file] {
                     Some(piece) => {
                         let piece_char = piece_chars.get(&piece.piece_type()).unwrap();
@@ -513,14 +510,14 @@ impl Display for Board {
                             Side::Black => write!(f, "{}", piece_char).unwrap(),
                         }
                     }
-                    None => write!(f, "{}", '.').unwrap(),
+                    None => write!(f, ".").unwrap(),
                 }
             }
             writeln!(f).unwrap();
         }
-        write!(f, "{}", ' ').unwrap();
+        write!(f, " ").unwrap();
         for file in 'a'..='h' {
-            write!(f, "{}", ' ').unwrap();
+            write!(f, " ").unwrap();
             write!(f, "{}", file).unwrap();
         }
         Ok(())
@@ -643,17 +640,6 @@ mod tests {
     fn test_aligned() {
         assert!(Board::aligned(28, 44, 60));
         assert!(!Board::aligned(43, 44, 60));
-    }
-    #[test]
-    fn test_pawn_moves() {
-        let mut board = Board::from_fen("8/8/3p1p2/3PpP2/8/1k6/2p5/Kn6 w - e6 0 1");
-        let mov = Move::new(27, 20, MoveType::EnPassant);
-        //let mov2 = Move::new(29, 20, MoveType::EnPassant);
-        println!("{board}");
-        board.make_move(mov);
-        board.unmake_move(mov);
-        println!("{board}");
-        assert!(true);
     }
     #[test]
     fn make_unmake() {

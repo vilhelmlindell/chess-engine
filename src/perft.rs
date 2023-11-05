@@ -1,11 +1,9 @@
-use crate::attack_tables::BETWEEN_RAYS;
-use crate::bitboard::Bitboard;
-use crate::board::{Board, Side};
-use crate::piece::{Piece, PieceType};
-use crate::piece_move::{Move, MoveType};
-use std::collections::hash_map;
+use crate::board::bitboard::Bitboard;
+use crate::board::piece::{Piece, PieceType};
+use crate::board::piece_move::{Move, MoveType};
+use crate::board::Board;
+use crate::move_generation::attack_tables::BETWEEN_RAYS;
 use std::collections::HashMap;
-use std::env;
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
 
