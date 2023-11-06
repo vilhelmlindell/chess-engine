@@ -1,4 +1,5 @@
 use crate::board::piece_move::Move;
+use crate::board::Board;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use std::collections::HashMap;
@@ -11,8 +12,8 @@ struct BookMove {
 
 static MOVES_BY_POSITION: Lazy<HashMap<String, Vec<BookMove>>> = Lazy::new(initialize_book_moves);
 
-pub fn get_book_move(current_fen: &String, times_played_weight: f32) -> Option<Move> {
-    if let Some(moves) = MOVES_BY_POSITION.get(current_fen) {
+pub fn get_book_move(board: &Board, times_played_weight: f32) -> Option<Move> {
+    if let Some(moves) = MOVES_BY_POSITION.get(&board.fen()) {
         let weighted_play_count = |play_count: u32| f32::powf(play_count as f32, times_played_weight) as u32;
         let mut weights: Vec<u32> = Vec::new();
         let weight_sum = moves.iter().fold(0, |acc, mov| {
