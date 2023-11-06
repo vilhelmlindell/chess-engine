@@ -26,8 +26,11 @@ pub fn get_book_move(board: &Board, times_played_weight: f32) -> Option<Move> {
         let mut acc_weights = 0;
         for (index, weight) in weights.iter().enumerate() {
             acc_weights += weight;
-            if acc_weights >= random_number {}
+            if acc_weights >= random_number {
+                return Some(Move::from_long_algebraic_notation(&moves.get(index).unwrap().move_string, board));
+            }
         }
+        Some(moves.last())
     }
     None
 }

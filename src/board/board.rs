@@ -22,7 +22,7 @@ pub const RANK_7: Bitboard = Bitboard(0x000000000000FF00);
 pub const RANK_8: Bitboard = Bitboard(0x00000000000000FF);
 pub const RANKS: [Bitboard; 8] = [RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8];
 
-pub fn square_from_string(square: String) -> usize {
+pub fn square_from_string(square: &str) -> usize {
     let files = "abcdefgh";
     let rank = files.chars().position(|char| square.as_bytes()[0] as char == char).unwrap();
     let file = (8 - (square.as_bytes()[1] as char).to_digit(10).unwrap()) as usize;

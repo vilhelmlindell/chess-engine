@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::simd::i32x1;
+use crate::board::{Board, square_from_string};
 
-use crate::board::piece::PieceType;
+use crate::board::piece::{Piece, PieceType};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum MoveType {
@@ -31,6 +33,28 @@ impl Move {
             from: start_square,
             to: end_square,
             move_type,
+        }
+    }
+    pub fn from_long_algebraic_notation(string: &str, board: &Board) -> Move {
+        let startSquare = square_from_string(&string[0..2]);
+        let endSquare = square_from_string(&string[2..4]);
+        
+        let startRank =  startSquare % 8;
+        let startFile = startSquare / 8;
+        
+        let endRank = endSquare % 8;
+        let endFile = endSquare / 8;
+        
+        let piece_type = board.squares[startSquare].unwrap().piece_type();
+        let mut move_type = MoveType::Normal;
+        
+        if piece_type == PieceType::Pawn {
+            if i32::abs(startRank as i32 - endRank as i32) == 2 {
+                move_type = MoveType::DoublePush;
+            }
+            else if i32::abs(startFile as i32 - endFile as i32) == 1 && board.squares[endSquare] == None {
+                move_type = MoveType::EnPassant;
+            }
         }
     }
 }
