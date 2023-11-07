@@ -1,9 +1,7 @@
+use crate::board::piece::PieceType;
+use crate::board::{square_from_string, Board};
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::simd::i32x1;
-use crate::board::{Board, square_from_string};
-
-use crate::board::piece::{Piece, PieceType};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum MoveType {
@@ -36,26 +34,35 @@ impl Move {
         }
     }
     pub fn from_long_algebraic_notation(string: &str, board: &Board) -> Move {
-        let startSquare = square_from_string(&string[0..2]);
-        let endSquare = square_from_string(&string[2..4]);
-        
-        let startRank =  startSquare % 8;
-        let startFile = startSquare / 8;
-        
-        let endRank = endSquare % 8;
-        let endFile = endSquare / 8;
-        
-        let piece_type = board.squares[startSquare].unwrap().piece_type();
+        let start_square = square_from_string(&string[0..2]);
+        let end_square = square_from_string(&string[2..4]);
+
+        let start_rank = (start_square % 8) as i32;
+        let start_file = (start_square / 8) as i32;
+
+        let end_rank = (end_square % 8) as i32;
+        let end_file = (end_square / 8) as i32;
+
+        let piece_type = board.squares[start_square].unwrap().piece_type();
         let mut move_type = MoveType::Normal;
-        
+
         if piece_type == PieceType::Pawn {
-            if i32::abs(startRank as i32 - endRank as i32) == 2 {
+            if i32::abs(start_rank - end_rank) == 2 {
                 move_type = MoveType::DoublePush;
-            }
-            else if i32::abs(startFile as i32 - endFile as i32) == 1 && board.squares[endSquare] == None {
+            } else if i32::abs(start_file - end_file) == 1 && board.squares[end_square].is_none() {
                 move_type = MoveType::EnPassant;
             }
         }
+
+        if piece_type == PieceType::King {
+            if start_file - end_file == -2 {
+                move_type = MoveType::Castle { kingside: true };
+            } else if start_file - end_file == 2 {
+                move_type = MoveType::Castle { kingside: false };
+            }
+        }
+
+        Move::new(start_square, end_square, move_type)
     }
 }
 

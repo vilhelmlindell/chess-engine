@@ -130,7 +130,7 @@ impl Uci {
                 _ => {}
             }
         }
-        let best_move = self.board.search(2.0);
+        let best_move = self.board.search(1.0);
         println!("bestmove {best_move}");
         println!("Material balance: {}", self.board.material_balance);
         println!("Position balance: {}", self.board.position_balance);

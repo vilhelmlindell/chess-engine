@@ -13,7 +13,8 @@ struct BookMove {
 static MOVES_BY_POSITION: Lazy<HashMap<String, Vec<BookMove>>> = Lazy::new(initialize_book_moves);
 
 pub fn get_book_move(board: &Board, times_played_weight: f32) -> Option<Move> {
-    if let Some(moves) = MOVES_BY_POSITION.get(&board.fen()) {
+    let fen = board.fen().split_whitespace().take(3).collect::<Vec<&str>>().join(" ") + " -";
+    if let Some(moves) = MOVES_BY_POSITION.get(&fen) {
         let weighted_play_count = |play_count: u32| f32::powf(play_count as f32, times_played_weight) as u32;
         let mut weights: Vec<u32> = Vec::new();
         let weight_sum = moves.iter().fold(0, |acc, mov| {
@@ -30,7 +31,7 @@ pub fn get_book_move(board: &Board, times_played_weight: f32) -> Option<Move> {
                 return Some(Move::from_long_algebraic_notation(&moves.get(index).unwrap().move_string, board));
             }
         }
-        Some(moves.last())
+        return Some(Move::from_long_algebraic_notation(&moves.last().unwrap().move_string, board));
     }
     None
 }
@@ -41,7 +42,7 @@ fn initialize_book_moves() -> HashMap<String, Vec<BookMove>> {
     for line in read_to_string("opening_book.txt").unwrap().lines() {
         if line.starts_with("pos") {
             // Extract the position key.
-            current_position = line.split_whitespace().nth(1).unwrap().to_string();
+            current_position = line.chars().skip(4).collect();
             moves_by_position.entry(current_position.clone()).or_default();
         } else {
             // Parse the move and times played.

@@ -46,24 +46,8 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn new() -> Self {
-        Self {
-            squares: [Option::<Piece>::None; 64],
-            side: Side::White,
-            occupied_squares: Bitboard(0),
-            side_squares: [Bitboard(0); 2],
-            attacked_squares: [Bitboard(0); 2],
-            piece_squares: [Bitboard(0); 12],
-            absolute_pinned_squares: Bitboard(0),
-            states: vec![BoardState::default()],
-            material_balance: 0,
-            position_balance: 0,
-            transposition_table: TranspositionTable::new(),
-            zobrist_hash: 0,
-        }
-    }
     pub fn from_fen(fen: &str) -> Self {
-        let mut board = Self::new();
+        let mut board = Self::default();
         board.load_fen(fen);
         board.absolute_pinned_squares = board.absolute_pins();
         board
@@ -208,7 +192,7 @@ impl Board {
 
         match *fields.get(3).unwrap() {
             "-" => {}
-            _ => self.state_mut().en_passant_square = Some(square_from_string(fields.get(3).unwrap().to_string())),
+            _ => self.state_mut().en_passant_square = Some(square_from_string(fields.get(3).unwrap())),
         }
 
         self.initialize_bitboards();
@@ -341,12 +325,6 @@ impl Board {
 
         self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
     }
-    fn castling_rights_bits(castling_rights: [CastlingRights; 2]) -> usize {
-        (castling_rights[Side::White].kingside as usize) << 3
-            | (castling_rights[Side::White].queenside as usize) << 2
-            | (castling_rights[Side::Black].kingside as usize) << 1
-            | castling_rights[Side::Black].queenside as usize
-    }
     pub fn attacked(&self, square: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
         if (PAWN_ATTACKS[self.side.enemy()][square] & pawns).0 != 0 {
@@ -475,10 +453,35 @@ impl Board {
         let attacked_blockers = blockers & attacks;
         attacks ^ rook_attacks(square, self.occupied_squares ^ attacked_blockers)
     }
-    pub fn xray_bishop_attacks(&self, square: usize, blockers: Bitboard) -> Bitboard {
+    fn xray_bishop_attacks(&self, square: usize, blockers: Bitboard) -> Bitboard {
         let attacks = bishop_attacks(square, self.occupied_squares);
         let attacked_blockers = blockers & attacks;
         attacks ^ bishop_attacks(square, self.occupied_squares ^ attacked_blockers)
+    }
+    fn castling_rights_bits(castling_rights: [CastlingRights; 2]) -> usize {
+        (castling_rights[Side::White].kingside as usize) << 3
+            | (castling_rights[Side::White].queenside as usize) << 2
+            | (castling_rights[Side::Black].kingside as usize) << 1
+            | castling_rights[Side::Black].queenside as usize
+    }
+}
+
+impl Default for Board {
+    fn default() -> Self {
+        Self {
+            squares: [Option::<Piece>::None; 64],
+            side: Side::White,
+            occupied_squares: Bitboard(0),
+            side_squares: [Bitboard(0); 2],
+            attacked_squares: [Bitboard(0); 2],
+            piece_squares: [Bitboard(0); 12],
+            absolute_pinned_squares: Bitboard(0),
+            states: vec![BoardState::default()],
+            material_balance: 0,
+            position_balance: 0,
+            transposition_table: TranspositionTable::default(),
+            zobrist_hash: 0,
+        }
     }
 }
 

@@ -4,6 +4,8 @@ use crate::board::Board;
 use crate::search::transposition_table::{NodeType, TranspositionEntry};
 use std::time::Instant;
 
+use super::book_moves::get_book_move;
+
 const MAX_DEPTH: u32 = 100;
 
 #[derive(Default, Clone, Copy)]
@@ -15,6 +17,10 @@ pub struct SearchInfo {
 
 impl Board {
     pub fn search(&mut self, time: f32) -> Move {
+        if let Some(book_move) = get_book_move(self, 0.5) {
+            return book_move;
+        }
+
         let start = Instant::now();
         let mut best_move: Option<Move> = None;
 

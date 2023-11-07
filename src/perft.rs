@@ -90,7 +90,7 @@ fn search(depth: u32, prev_mov: Move, board: &mut Board) -> PerftResult {
     result
 }
 
-fn get_move_info(mov: Move, board: &mut Board, extra_info: bool) -> PerftResult {
+fn get_move_info(mov: Move, board: &Board, extra_info: bool) -> PerftResult {
     let mut info = PerftResult { nodes: 1, ..Default::default() };
 
     if extra_info {
