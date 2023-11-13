@@ -9,6 +9,10 @@ use crate::search::transposition_table::*;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
+use std::sync::Mutex;
+use crate::evaluation::evaluate;
+use crate::move_generation::generate_moves;
+use crate::search::search;
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -43,9 +47,22 @@ pub struct Board {
     pub position_balance: i32,
     pub transposition_table: TranspositionTable,
     pub zobrist_hash: u64,
+    
+    generate_moves: Box<dyn Fn(&Board) -> Vec<Move>>,
+    evaluate: Box<dyn Fn(&Board) -> i32>,
+    search: Box<dyn Fn(&mut Board, f32) -> Move>
 }
 
 impl Board {
+    pub fn generate_moves(&self) -> Vec<Move> {
+        (generate_moves)(self)
+    }
+    pub fn evaluate(&self) -> i32 {
+        (evaluate)(self)
+    }
+    pub fn search(&mut self, time: f32) -> Move {
+        (search)(self, time)
+    }
     pub fn from_fen(fen: &str) -> Self {
         let mut board = Self::default();
         board.load_fen(fen);
@@ -481,6 +498,9 @@ impl Default for Board {
             position_balance: 0,
             transposition_table: TranspositionTable::default(),
             zobrist_hash: 0,
+            generate_moves: Box::new(generate_moves),
+            evaluate: Box::new(evaluate),
+            search: Box::new(search),
         }
     }
 }

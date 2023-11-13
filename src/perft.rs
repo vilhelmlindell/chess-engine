@@ -6,6 +6,7 @@ use crate::move_generation::attack_tables::BETWEEN_RAYS;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
+use crate::move_generation::generate_moves;
 
 #[derive(Default, Clone, Copy)]
 pub struct PerftResult {
@@ -56,7 +57,7 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
     let mut move_counter = HashMap::<Move, u32>::new();
     let mut result = PerftResult::default();
     let mut board = Board::from_fen(fen);
-    for mov in board.generate_moves() {
+    for mov in generate_moves(&mut board) {
         board.make_move(mov);
         let nodes = search(depth - 1, mov, &mut board);
         board.unmake_move(mov);
@@ -81,7 +82,7 @@ fn search(depth: u32, prev_mov: Move, board: &mut Board) -> PerftResult {
         return get_move_info(prev_mov, board, false);
     }
     let mut result = PerftResult::default();
-    let moves = board.generate_moves();
+    let moves = generate_moves(board);
     for mov in moves {
         board.make_move(mov);
         result = result + search(depth - 1, mov, board);
@@ -120,7 +121,7 @@ fn get_move_info(mov: Move, board: &Board, extra_info: bool) -> PerftResult {
                 info.double_checks = 1;
             }
         }
-        if board.generate_moves().is_empty() {
+        if generate_moves(board).is_empty() {
             info.checkmates = 1;
         }
     }

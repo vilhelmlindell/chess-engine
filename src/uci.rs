@@ -3,6 +3,7 @@ use std::time::Instant;
 
 use crate::board::Board;
 use crate::perft::perft;
+use crate::search::search;
 
 pub struct Uci {
     name: String,
@@ -110,13 +111,11 @@ impl Uci {
             match token {
                 "perft" => {
                     let start = Instant::now();
-                    //println!("{}", self.board.zobrist_hash);
                     let result = perft(&self.board.fen(), words.next().unwrap_or("1").parse().unwrap());
                     println!("Nodes: {}", result.nodes);
                     let seconds = start.elapsed().as_secs_f32();
                     println!("Time elapsed: {}", seconds);
                     println!("Nps: {}", result.nodes as f32 / seconds);
-                    //println!("{}", self.board.zobrist_hash);
                     return;
                 }
                 //"infinite" => search_option.infinite = true,
@@ -130,7 +129,7 @@ impl Uci {
                 _ => {}
             }
         }
-        let best_move = self.board.search(1.0);
+        let best_move = search(&mut self.board, 1.0);
         println!("bestmove {best_move}");
         println!("Material balance: {}", self.board.material_balance);
         println!("Position balance: {}", self.board.position_balance);

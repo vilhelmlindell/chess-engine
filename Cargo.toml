@@ -9,3 +9,7 @@ edition = "2021"
 derive_more = "0.99.17"
 once_cell = "1.17.0"
 rand = "0.8.5"
+
+[profile.release]
+lto = "fat"
+opt-level = 3
