@@ -2,6 +2,7 @@ use crate::board::piece_move::Move;
 
 pub const TABLE_SIZE: usize = u64::pow(2, 24) as usize - 1;
 
+#[derive(Clone)]
 pub struct TranspositionTable {
     pub table: Box<[Option<TranspositionEntry>; TABLE_SIZE]>,
 }

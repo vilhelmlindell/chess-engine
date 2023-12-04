@@ -1,61 +1,58 @@
+use super::book_moves::get_book_move;
 use crate::board::piece::{Piece, PieceType};
 use crate::board::piece_move::Move;
 use crate::board::Board;
-use crate::search::transposition_table::{NodeType, TranspositionEntry};
-use std::time::Instant;
 use crate::evaluation::evaluate;
 use crate::move_generation::generate_moves;
 use crate::search::move_ordering::order_moves;
-use super::book_moves::get_book_move;
+use crate::search::move_ordering::OrderingParams;
+use crate::search::transposition_table::{NodeType, TranspositionEntry};
+use std::time::Instant;
 
 pub const MAX_DEPTH: usize = 100;
 pub const KILLER_MOVE_SLOTS: usize = 3;
 
 #[derive(Default, Clone, Copy)]
+pub struct SearchState {
+    pub ordering_params: OrderingParams,
+    pub result: SearchResult,
+}
+
+#[derive(Default, Clone, Copy)]
 pub struct SearchResult {
-    pub checkmates_found: u32,
-    pub transpositions: u32,
+    pub best_move: Option<Move>,
+    pub depth_reached: u32,
     pub positions_evaluated: u32,
+    pub transpositions: u32,
 }
 
-struct SearchState {
-    killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
-    diagnostics: SearchDiagnostics
-}
+pub fn search(time: f32, board: &mut Board) -> SearchResult {
+    board.transposition_table.clear();
 
-struct SearchDiagnostics {
-    positions_evaluated: u32,
-    transpositions: u32,
-}
+    let mut search_state = SearchState::default();
 
-pub fn search(board: &mut Board, time: f32) -> Move {
-    if let Some(book_move) = get_book_move(board, 0.5) {
-        return book_move;
-    }
+    //if let Some(book_move) = get_book_move(board, 0.5) {
+    //    search_state.result.best_move = Some(book_move);
+    //    return search_state.result;
+    //}
 
     let start = Instant::now();
-    let mut best_move: Option<Move> = None;
-
-    board.transposition_table.clear();
-    
-    let mut killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
 
     for depth in 1..=MAX_DEPTH as u32 {
         let mut highest_eval = i32::MIN;
         let mut curr_best_move: Option<Move> = None;
 
         let mut moves = generate_moves(board);
-        order_moves(board, &mut moves, 0, &killer_moves);
+        order_moves(board, &mut moves, 0, &search_state.ordering_params);
 
         for mov in moves {
             if start.elapsed().as_secs_f32() > time {
-                if let Some(best_mov) = best_move {
-                    return best_mov;
-                }
+                search_state.result.depth_reached = (depth as i32 - 1) as u32;
+                return search_state.result;
             }
 
             board.make_move(mov);
-            let eval = -negamax(board, depth - 1, i32::MIN + 1, i32::MAX, 0, &mut killer_moves);
+            let eval = -negamax(board, depth - 1, i32::MIN + 1, i32::MAX, 0, &mut search_state);
             board.unmake_move(mov);
 
             if eval > highest_eval {
@@ -64,14 +61,15 @@ pub fn search(board: &mut Board, time: f32) -> Move {
             }
         }
 
-        best_move = curr_best_move;
-        let entry = TranspositionEntry::new(0, highest_eval, best_move.unwrap(), NodeType::Exact, board.zobrist_hash);
+        search_state.result.best_move = curr_best_move;
+        let entry = TranspositionEntry::new(0, highest_eval, search_state.result.best_move.unwrap(), NodeType::Exact, board.zobrist_hash);
         board.transposition_table.store(entry);
     }
-    best_move.unwrap()
+    search_state.result.depth_reached = (MAX_DEPTH - 1) as u32;
+    return search_state.result;
 }
 
-pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
+pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32, state: &mut SearchState) -> i32 {
     if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
         if entry.hash == board.zobrist_hash && entry.depth >= depth {
             match entry.node_type {
@@ -92,12 +90,12 @@ pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u3
 
     // Depth limit reached
     if depth == 0 {
-        let eval = quiescence_search(board, alpha, beta, ply + 1);
+        let eval = quiescence_search(board, alpha, beta, ply + 1, state);
         return eval;
     }
 
     let mut moves = generate_moves(board);
-    order_moves(board, &mut moves, ply);
+    order_moves(board, &mut moves, ply, &state.ordering_params);
 
     // Terminal node
     if moves.is_empty() {
@@ -113,17 +111,15 @@ pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u3
 
     for mov in moves {
         board.make_move(mov);
-        let eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, killer_moves);
+        let eval = -negamax(board, depth - 1, -beta, -alpha, ply + 1, state);
         board.unmake_move(mov);
 
         if eval >= beta {
             let entry = TranspositionEntry::new(depth, beta, mov, NodeType::UpperBound, board.zobrist_hash);
             board.transposition_table.store(entry);
             if board.squares[mov.to].is_none() {
-                for i in (KILLER_MOVE_SLOTS - 2)..=0 {
-                    killer_moves[ply as usize][i + 1] = killer_moves[ply as usize][i];
-                    killer_moves[ply as usize][0] = Some(mov);
-                }
+                state.ordering_params.killer_moves[ply as usize].rotate_right(1);
+                state.ordering_params.killer_moves[ply as usize][0] = Some(mov);
             }
             return beta;
         }
@@ -140,7 +136,7 @@ pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u3
     alpha
 }
 
-fn quiescence_search(board: &mut Board, mut alpha: i32, beta: i32, ply_from_root: u32) -> i32 {
+fn quiescence_search(board: &mut Board, mut alpha: i32, beta: i32, ply: u32, state: &mut SearchState) -> i32 {
     let stand_pat = evaluate(board);
     if stand_pat >= beta {
         return beta;
@@ -150,22 +146,18 @@ fn quiescence_search(board: &mut Board, mut alpha: i32, beta: i32, ply_from_root
     }
 
     let mut moves = generate_moves(board);
-    order_moves(board, &mut moves, ply, killer_moves);
+    order_moves(board, &mut moves, ply, &state.ordering_params);
 
     if moves.is_empty() {
         let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
-        return if board.attacked(king_square) {
-            i32::MIN + ply_from_root as i32
-        } else {
-            0
-        }
+        return if board.attacked(king_square) { i32::MIN + ply as i32 } else { 0 };
     }
     let mut num_captures = 0;
     for mov in moves {
         if board.is_capture(mov) {
             num_captures += 1;
             board.make_move(mov);
-            let eval = -quiescence_search(board, -beta, -alpha, ply + 1, killer_moves);
+            let eval = -quiescence_search(board, -beta, -alpha, ply + 1, state);
             board.unmake_move(mov);
 
             if eval >= beta {
@@ -178,10 +170,6 @@ fn quiescence_search(board: &mut Board, mut alpha: i32, beta: i32, ply_from_root
     }
     if num_captures == 0 {
         return stand_pat;
-    }
-    if let Some(mov) = best_move {
-        let entry = TranspositionEntry::new(depth, alpha, mov, NodeType::LowerBound, board.zobrist_hash);
-        board.transposition_table.store(entry);
     }
     alpha
 }

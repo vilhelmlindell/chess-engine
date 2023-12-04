@@ -129,8 +129,9 @@ impl Uci {
                 _ => {}
             }
         }
-        let best_move = search(&mut self.board, 1.0);
-        println!("bestmove {best_move}");
+        let search_result = search(1.0, &mut self.board);
+        println!("bestmove {}", search_result.best_move.unwrap());
+        println!("Depth reached: {}", search_result.depth_reached);
         println!("Material balance: {}", self.board.material_balance);
         println!("Position balance: {}", self.board.position_balance);
     }

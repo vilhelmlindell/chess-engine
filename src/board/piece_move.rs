@@ -3,16 +3,19 @@ use crate::board::{square_from_string, Board};
 use std::collections::HashMap;
 use std::fmt::Display;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+#[derive(Default, PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum MoveType {
+    #[default]
     Normal,
-    Castle { kingside: bool },
+    Castle {
+        kingside: bool,
+    },
     DoublePush,
     EnPassant,
     Promotion(PieceType),
 }
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
+#[derive(Default, PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub struct Move {
     pub from: usize,
     pub to: usize,
