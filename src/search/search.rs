@@ -66,7 +66,7 @@ pub fn search(time: f32, board: &mut Board) -> SearchResult {
         board.transposition_table.store(entry);
     }
     search_state.result.depth_reached = (MAX_DEPTH - 1) as u32;
-    return search_state.result;
+    search_state.result
 }
 
 pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32, state: &mut SearchState) -> i32 {
@@ -146,12 +146,12 @@ fn quiescence_search(board: &mut Board, mut alpha: i32, beta: i32, ply: u32, sta
     }
 
     let mut moves = generate_moves(board);
-    order_moves(board, &mut moves, ply, &state.ordering_params);
 
     if moves.is_empty() {
         let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
         return if board.attacked(king_square) { i32::MIN + ply as i32 } else { 0 };
     }
+    order_moves(board, &mut moves, ply, &state.ordering_params);
     let mut num_captures = 0;
     for mov in moves {
         if board.is_capture(mov) {
