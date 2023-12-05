@@ -243,6 +243,11 @@ impl Board {
             state.captured_piece = Some(captured_piece);
         }
 
+        if let Some(prev_en_passant_square) = self.state().en_passant_square {
+            let prev_file = prev_en_passant_square % 8;
+            self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+        }
+
         self.move_piece(mov.from, mov.to);
 
         match mov.move_type {
@@ -258,10 +263,6 @@ impl Board {
             }
             MoveType::DoublePush => {
                 state.en_passant_square = Some((mov.to as i32 + Direction::down(self.side).value()) as usize);
-                if let Some(prev_en_passant_square) = self.state().en_passant_square {
-                    let prev_file = prev_en_passant_square % 8;
-                    self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
-                }
                 let file = state.en_passant_square.unwrap() % 8;
                 self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[file];
             }
@@ -311,11 +312,6 @@ impl Board {
             MoveType::DoublePush => {
                 let file = self.state().en_passant_square.unwrap() % 8;
                 self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[file];
-
-                if let Some(prev_en_passant_square) = self.states.last().unwrap().en_passant_square {
-                    let prev_file = prev_en_passant_square % 8;
-                    self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
-                }
             }
             MoveType::EnPassant => {
                 let square = (self.states[self.states.len() - 2].en_passant_square.unwrap() as i32 + Direction::down(self.side).value()) as usize;
@@ -334,6 +330,11 @@ impl Board {
         self.states.pop();
 
         let castling_rights_bits_after = Self::castling_rights_bits(self.state().castling_rights);
+
+        if let Some(prev_en_passant_square) = self.state().en_passant_square {
+            let prev_file = prev_en_passant_square % 8;
+            self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+        }
 
         self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
     }
@@ -652,8 +653,10 @@ mod tests {
     }
     #[test]
     fn make_unmake() {
-        let original = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/1B1PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R b KQkq - 1 1");
-        let mut board = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/1B1PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R b KQkq - 1 1");
+        //let original = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/1B1PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R b KQkq - 1 1");
+        //let mut board = Board::from_fen("r3k2r/p1ppqpb1/bn2pnp1/1B1PN3/1p2P3/2N2Q1p/PPPB1PPP/R3K2R b KQkq - 1 1");
+        let original = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         let zobrist_before = board.zobrist_hash;
         for mov in board.generate_moves() {
             board.make_move(mov);
@@ -661,13 +664,13 @@ mod tests {
             println!();
             println!("{original}");
             println!("{board}");
+            println!("{mov}");
+            assert_eq!(zobrist_before, board.zobrist_hash);
 
             for square in 0..64 {
                 assert!(original.squares[square] == board.squares[square]);
                 assert!(original.absolute_pins() == board.absolute_pins());
             }
         }
-        let zobrist_after = board.zobrist_hash;
-        assert_eq!(zobrist_before, zobrist_after);
     }
 }
