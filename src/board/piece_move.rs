@@ -1,3 +1,5 @@
+use bitflags::bitflags;
+
 use crate::board::piece::PieceType;
 use crate::board::{square_from_string, Board};
 use std::collections::HashMap;
@@ -30,12 +32,16 @@ impl Move {
         if end_square > 63 {
             panic!("end square can't be larger than 63");
         }
+
         Move {
             from: start_square,
             to: end_square,
             move_type,
         }
     }
+    //pub fn from() -> {}
+    //pub fn to() -> {}
+    //pub fn move_type() -> MoveType {}
     pub fn from_long_algebraic_notation(string: &str, board: &Board) -> Move {
         let start_square = square_from_string(&string[0..2]);
         let end_square = square_from_string(&string[2..4]);

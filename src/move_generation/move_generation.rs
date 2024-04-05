@@ -9,6 +9,8 @@ use crate::board::Side;
 use crate::board::*;
 use std::cmp::Ordering;
 
+use arrayvec::ArrayVec;
+
 const WHITE_KINGSIDE_SQUARES: Bitboard = Bitboard(0x06000000000000000);
 const WHITE_KINGSIDE_KING_SQUARES: [usize; 2] = [61, 62];
 const WHITE_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x0E00000000000000);
@@ -17,9 +19,10 @@ const BLACK_KINGSIDE_SQUARES: Bitboard = Bitboard(0x0000000000000060);
 const BLACK_KINGSIDE_KING_SQUARES: [usize; 2] = [5, 6];
 const BLACK_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x000000000000000E);
 const BLACK_QUEENSIDE_KING_SQUARES: [usize; 2] = [3, 2];
+pub const MAX_LEGAL_MOVES: usize = 218;
 
-pub fn generate_moves(board: &Board) -> Vec<Move> {
-    let mut moves = Vec::<Move>::with_capacity(256);
+pub fn generate_moves(board: &Board) -> ArrayVec<Move, MAX_LEGAL_MOVES> {
+    let mut moves = ArrayVec::<Move, MAX_LEGAL_MOVES>::new();
 
     generate_king_moves(&mut moves, board);
 
@@ -48,7 +51,7 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
     moves
 }
 
-fn generate_pawn_moves(moves: &mut Vec<Move>, board: &Board) {
+fn generate_pawn_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let up_left: Direction = match board.side {
         Side::White => Direction::NorthWest,
         Side::Black => Direction::SouthEast,
@@ -119,7 +122,7 @@ fn generate_pawn_moves(moves: &mut Vec<Move>, board: &Board) {
 
     generate_en_passant_moves(moves, board);
 }
-fn generate_knight_moves(moves: &mut Vec<Move>, board: &Board) {
+fn generate_knight_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Knight, board.side)];
 
     for from in bitboard {
@@ -127,7 +130,7 @@ fn generate_knight_moves(moves: &mut Vec<Move>, board: &Board) {
         add_moves_from_bitboard(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
-fn generate_bishop_moves(moves: &mut Vec<Move>, board: &Board) {
+fn generate_bishop_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Bishop, board.side)];
 
     for from in bitboard {
@@ -135,7 +138,7 @@ fn generate_bishop_moves(moves: &mut Vec<Move>, board: &Board) {
         add_moves_from_bitboard(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
-fn generate_rook_moves(moves: &mut Vec<Move>, board: &Board) {
+fn generate_rook_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Rook, board.side)];
 
     for from in bitboard {
@@ -144,7 +147,7 @@ fn generate_rook_moves(moves: &mut Vec<Move>, board: &Board) {
         add_moves_from_bitboard(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
-fn generate_queen_moves(moves: &mut Vec<Move>, board: &Board) {
+fn generate_queen_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Queen, board.side)];
 
     for from in bitboard {
@@ -153,7 +156,7 @@ fn generate_queen_moves(moves: &mut Vec<Move>, board: &Board) {
         add_moves_from_bitboard(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
-fn generate_king_moves(moves: &mut Vec<Move>, board: &Board) {
+fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let from = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
     let enemy_king_square = board.piece_squares[Piece::new(PieceType::King, board.side.enemy())];
     let attack_bitboard = KING_ATTACK_MASKS[from] & !board.friendly_squares();
@@ -164,7 +167,7 @@ fn generate_king_moves(moves: &mut Vec<Move>, board: &Board) {
         }
     }
 }
-fn generate_castling_moves(moves: &mut Vec<Move>, board: &Board) {
+fn generate_castling_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     match board.side {
         Side::White => {
             if can_castle(board, WHITE_KINGSIDE_SQUARES, WHITE_KINGSIDE_KING_SQUARES) && board.state().castling_rights[Side::White].kingside {
@@ -184,7 +187,7 @@ fn generate_castling_moves(moves: &mut Vec<Move>, board: &Board) {
         }
     };
 }
-fn generate_en_passant_moves(moves: &mut Vec<Move>, board: &Board) {
+fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     if let Some(to) = board.state().en_passant_square {
         let mut en_passant_pawns = board.piece_squares[Piece::new(PieceType::Pawn, board.side)] & PAWN_ATTACKS[board.side][to];
 
@@ -251,7 +254,7 @@ fn can_castle(board: &Board, squares: Bitboard, king_squares: [usize; 2]) -> boo
     let is_intercepted = king_squares.iter().any(|sq| board.attacked(*sq));
     !is_blocked && !is_intercepted
 }
-fn resolve_single_check(attacker_square: usize, moves: &mut Vec<Move>, board: &Board) {
+fn resolve_single_check(attacker_square: usize, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
 
     // if the checker is a slider, we can block the check
@@ -319,7 +322,7 @@ fn resolve_single_check(attacker_square: usize, moves: &mut Vec<Move>, board: &B
     }
     add_moves_from_bitboard(|from| Move::new(from, attacker_square, MoveType::Normal), moves, capturers, board);
 }
-fn add_moves_from_bitboard<F: Fn(usize) -> Move>(mov: F, moves: &mut Vec<Move>, bitboard: Bitboard, board: &Board) {
+fn add_moves_from_bitboard<F: Fn(usize) -> Move>(mov: F, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, bitboard: Bitboard, board: &Board) {
     for to in bitboard {
         let mov = mov(to);
         if legal(board, mov) {

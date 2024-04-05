@@ -1,3 +1,5 @@
+use arrayvec::ArrayVec;
+
 use super::bitboard::Bitboard;
 use super::direction::Direction;
 use super::piece::{Piece, PieceType};
@@ -7,6 +9,7 @@ use crate::evaluation;
 use crate::evaluation::piece_square_tables::position_value;
 use crate::move_generation;
 use crate::move_generation::attack_tables::*;
+use crate::move_generation::MAX_LEGAL_MOVES;
 use crate::search::search::{self, SearchResult};
 use crate::search::transposition_table::*;
 use std::collections::HashMap;
@@ -49,7 +52,7 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn generate_moves(&self) -> Vec<Move> {
+    pub fn generate_moves(&self) -> ArrayVec<Move, MAX_LEGAL_MOVES> {
         move_generation::generate_moves(self)
     }
     pub fn evaluate(&self) -> i32 {

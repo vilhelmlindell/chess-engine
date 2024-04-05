@@ -3,7 +3,7 @@ mod unformatted {
     use crate::board::Side;
     use crate::board::piece::PieceType;
 
-    const PAWN_SQUARE_TABLE: [i32; 64] = [
+    const OPENING_PAWN_SQUARE_TABLE: [i32; 64] = [
          0,  0,  0,  0,  0,  0,  0,  0,
         50, 50, 50, 50, 50, 50, 50, 50,
         10, 10, 20, 30, 30, 20, 10, 10,
@@ -13,7 +13,7 @@ mod unformatted {
          5, 10, 10,-20,-20, 10, 10,  5,
          0,  0,  0,  0,  0,  0,  0,  0
     ];
-    const KNIGHT_SQUARE_TABLE: [i32; 64] = [
+    const OPENING_KNIGHT_SQUARE_TABLE: [i32; 64] = [
         -50,-40,-30,-30,-30,-30,-40,-50,
         -40,-20,  0,  0,  0,  0,-20,-40,
         -30,  0, 10, 15, 15, 10,  0,-30,
@@ -23,7 +23,7 @@ mod unformatted {
         -40,-20,  0,  5,  5,  0,-20,-40,
         -50,-40,-30,-30,-30,-30,-40,-50,
     ];
-    const BISHOP_SQUARE_TABLE: [i32; 64] = [
+    const OPENING_BISHOP_SQUARE_TABLE: [i32; 64] = [
         -20,-10,-10,-10,-10,-10,-10,-20,
         -10,  0,  0,  0,  0,  0,  0,-10,
         -10,  0,  5, 10, 10,  5,  0,-10,
@@ -33,7 +33,7 @@ mod unformatted {
         -10,  5,  0,  0,  0,  0,  5,-10,
         -20,-10,-10,-10,-10,-10,-10,-20,
     ];
-    const ROOK_SQUARE_TABLE: [i32; 64] = [
+    const OPENING_ROOK_SQUARE_TABLE: [i32; 64] = [
          0,  0,  0,  0,  0,  0,  0,  0,
          5, 10, 10, 10, 10, 10, 10,  5,
         -5,  0,  0,  0,  0,  0,  0, -5,
@@ -43,7 +43,7 @@ mod unformatted {
         -5,  0,  0,  0,  0,  0,  0, -5,
          0,  0,  0,  5,  5,  0,  0,  0
     ];
-    const QUEEN_SQUARE_TABLE: [i32; 64] = [
+    const OPENING_QUEEN_SQUARE_TABLE: [i32; 64] = [
         -20,-10,-10, -5, -5,-10,-10,-20,
         -10,  0,  0,  0,  0,  0,  0,-10,
         -10,  0,  5,  5,  5,  5,  0,-10,
@@ -53,7 +53,7 @@ mod unformatted {
         -10,  0,  5,  0,  0,  0,  0,-10,
         -20,-10,-10, -5, -5,-10,-10,-20
     ];
-    const KING_SQUARE_TABLE: [i32; 64] = [
+    const OPENING_KING_SQUARE_TABLE: [i32; 64] = [
         -30,-40,-40,-50,-50,-40,-40,-30,
         -30,-40,-40,-50,-50,-40,-40,-30,
         -30,-40,-40,-50,-50,-40,-40,-30,
@@ -75,7 +75,7 @@ mod unformatted {
          6, 5, 4, 3, 3, 4, 5, 6
     ];
 
-    const PIECE_SQUARE_TABLES: [[i32; 64]; 6] = [PAWN_SQUARE_TABLE, KNIGHT_SQUARE_TABLE, BISHOP_SQUARE_TABLE, ROOK_SQUARE_TABLE, QUEEN_SQUARE_TABLE, KING_SQUARE_TABLE];
+    const PIECE_SQUARE_TABLES: [[i32; 64]; 6] = [OPENING_PAWN_SQUARE_TABLE, OPENING_KNIGHT_SQUARE_TABLE, OPENING_BISHOP_SQUARE_TABLE, OPENING_ROOK_SQUARE_TABLE, OPENING_QUEEN_SQUARE_TABLE, OPENING_KING_SQUARE_TABLE];
 
     pub fn position_value(piece_type: PieceType, square: usize, side: Side) -> i32 {
         match side {

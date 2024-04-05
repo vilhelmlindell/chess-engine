@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 const HASH_MOVE_SCORE: i32 = 1200;
 const CAPTURE_BASE_SCORE: i32 = 1000;
-const KILLER_MOVE_SCORE: i32 = 1000;
+const KILLER_MOVE_SCORE: i32 = 2000;
 
 #[derive(Clone, Copy)]
 pub struct OrderingParams {

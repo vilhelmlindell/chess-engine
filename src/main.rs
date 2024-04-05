@@ -4,7 +4,6 @@ pub mod move_generation;
 pub mod perft;
 pub mod search;
 pub mod uci;
-
 use uci::Uci;
 
 fn main() {

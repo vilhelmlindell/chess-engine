@@ -3,14 +3,14 @@ use crate::board::piece::{Piece, PieceType};
 use crate::board::piece_move::{Move, MoveType};
 use crate::board::Board;
 use crate::move_generation::attack_tables::BETWEEN_RAYS;
+use crate::move_generation::generate_moves;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
-use crate::move_generation::generate_moves;
 
 #[derive(Default, Clone, Copy)]
 pub struct PerftResult {
-    pub nodes: u32,
+    pub nodes: u64,
     pub captures: u32,
     pub en_passants: u32,
     pub castles: u32,
@@ -54,10 +54,10 @@ impl Display for PerftResult {
 }
 
 pub fn perft(fen: &str, depth: u32) -> PerftResult {
-    let mut move_counter = HashMap::<Move, u32>::new();
+    let mut move_counter = HashMap::<Move, u64>::new();
     let mut result = PerftResult::default();
     let mut board = Board::from_fen(fen);
-    for mov in generate_moves(&mut board) {
+    for mov in generate_moves(&board) {
         board.make_move(mov);
         let nodes = search(depth - 1, mov, &mut board);
         board.unmake_move(mov);
@@ -131,16 +131,28 @@ fn get_move_info(mov: Move, board: &Board, extra_info: bool) -> PerftResult {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use super::*;
 
     #[test]
     fn test_perft_startpos() {
+        let start = Instant::now();
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        assert_eq!(perft(fen, 1).nodes, 20);
-        assert_eq!(perft(fen, 2).nodes, 400);
-        assert_eq!(perft(fen, 3).nodes, 8902);
-        assert_eq!(perft(fen, 4).nodes, 197281);
+
+        //assert_eq!(perft(fen, 1).nodes, 20);
+        //assert_eq!(perft(fen, 2).nodes, 400);
+        //assert_eq!(perft(fen, 3).nodes, 8902);
+        //assert_eq!(perft(fen, 4).nodes, 197281);
         //assert_eq!(perft(fen, 5).nodes, 4865609);
+        //assert_eq!(perft(fen, 6).nodes, 119060324);
+        assert_eq!(perft(fen, 7).nodes, 3195901860);
+
+        // Calculate elapsed time
+        let elapsed = start.elapsed();
+
+        // Print elapsed time
+        println!("Test took {} milliseconds", elapsed.as_millis());
     }
     #[test]
     fn test_perft2() {
@@ -185,6 +197,7 @@ mod tests {
         assert_eq!(perft(fen, 2).nodes, 2079);
         assert_eq!(perft(fen, 3).nodes, 89890);
         assert_eq!(perft(fen, 4).nodes, 3894594);
-        //assert_eq!(perft(fen, 5).nodes, 164075551);
+        assert_eq!(perft(fen, 5).nodes, 164075551);
+        assert_eq!(perft(fen, 5).nodes, 6923051137);
     }
 }

@@ -149,7 +149,7 @@ fn quiescence_search(board: &mut Board, mut alpha: i32, beta: i32, ply: u32, sta
         alpha = stand_pat;
     }
 
-    let mut moves = generate_moves(board);
+    let moves = generate_moves(board);
 
     if moves.is_empty() {
         let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
