@@ -8,9 +8,9 @@ pub enum Direction {
     South,
     West,
     East,
-    SouthWest,
     NorthWest,
     NorthEast,
+    SouthWest,
     SouthEast,
 }
 

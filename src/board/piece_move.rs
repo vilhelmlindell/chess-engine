@@ -26,12 +26,8 @@ pub struct Move {
 
 impl Move {
     pub fn new(start_square: usize, end_square: usize, move_type: MoveType) -> Move {
-        if start_square > 63 {
-            panic!("start square can't be larger than 63");
-        }
-        if end_square > 63 {
-            panic!("end square can't be larger than 63");
-        }
+        assert!(start_square < 64, "start square can't be larger than 63");
+        assert!(end_square < 64, "end square can't be larger than 63");
 
         Move {
             from: start_square,
@@ -42,7 +38,7 @@ impl Move {
     //pub fn from() -> {}
     //pub fn to() -> {}
     //pub fn move_type() -> MoveType {}
-    pub fn from_long_algebraic_notation(string: &str, board: &Board) -> Move {
+    pub fn from_long_algebraic(string: &str, board: &Board) -> Move {
         let start_square = square_from_string(&string[0..2]);
         let end_square = square_from_string(&string[2..4]);
 

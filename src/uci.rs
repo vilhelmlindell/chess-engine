@@ -112,8 +112,8 @@ impl Uci {
                 "perft" => {
                     let start = Instant::now();
                     let result = perft(&self.board.fen(), words.next().unwrap_or("1").parse().unwrap());
-                    println!("Nodes: {}", result.nodes);
                     let seconds = start.elapsed().as_secs_f32();
+                    println!("Nodes: {}", result.nodes);
                     println!("Time elapsed: {}", seconds);
                     println!("Nps: {}", result.nodes as f32 / seconds);
                     return;

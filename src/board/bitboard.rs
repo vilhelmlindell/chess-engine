@@ -75,6 +75,12 @@ impl Bitboard {
             Direction::SouthWest => self.south_west(),
             Direction::SouthEast => self.south_east(),
         }
+        //const DIRECTIONS: [fn(&self) -> Bitboard; 8] = [
+        //    Self::north, Self::south, Self::west, Self::east,
+        //    Self::north_west, Self::north_east, Self::south_west, Self::south_east
+        //];
+
+        //DIRECTIONS[direction as usize](self)
     }
 }
 impl Iterator for Bitboard {

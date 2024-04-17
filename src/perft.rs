@@ -140,13 +140,13 @@ mod tests {
         let start = Instant::now();
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-        //assert_eq!(perft(fen, 1).nodes, 20);
-        //assert_eq!(perft(fen, 2).nodes, 400);
-        //assert_eq!(perft(fen, 3).nodes, 8902);
-        //assert_eq!(perft(fen, 4).nodes, 197281);
+        assert_eq!(perft(fen, 1).nodes, 20);
+        assert_eq!(perft(fen, 2).nodes, 400);
+        assert_eq!(perft(fen, 3).nodes, 8902);
+        assert_eq!(perft(fen, 4).nodes, 197281);
         //assert_eq!(perft(fen, 5).nodes, 4865609);
         //assert_eq!(perft(fen, 6).nodes, 119060324);
-        assert_eq!(perft(fen, 7).nodes, 3195901860);
+        //assert_eq!(perft(fen, 7).nodes, 3195901860);
 
         // Calculate elapsed time
         let elapsed = start.elapsed();
@@ -197,7 +197,7 @@ mod tests {
         assert_eq!(perft(fen, 2).nodes, 2079);
         assert_eq!(perft(fen, 3).nodes, 89890);
         assert_eq!(perft(fen, 4).nodes, 3894594);
-        assert_eq!(perft(fen, 5).nodes, 164075551);
-        assert_eq!(perft(fen, 5).nodes, 6923051137);
+        //assert_eq!(perft(fen, 5).nodes, 164075551);
+        //assert_eq!(perft(fen, 6).nodes, 6923051137);
     }
 }

@@ -1,5 +1,3 @@
-use arrayvec::ArrayVec;
-
 use super::bitboard::Bitboard;
 use super::direction::Direction;
 use super::piece::{Piece, PieceType};
@@ -12,6 +10,7 @@ use crate::move_generation::attack_tables::*;
 use crate::move_generation::MAX_LEGAL_MOVES;
 use crate::search::search::{self, SearchResult};
 use crate::search::transposition_table::*;
+use arrayvec::ArrayVec;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
@@ -35,7 +34,6 @@ pub fn square_from_string(square: &str) -> usize {
     file * 8 + rank
 }
 
-#[non_exhaustive]
 pub struct Board {
     pub squares: [Option<Piece>; 64],
     pub side: Side,
@@ -417,12 +415,13 @@ impl Board {
             }
         }
     }
+    #[inline(always)]
     fn move_piece(&mut self, from: usize, to: usize) {
         let piece = self.squares[from].unwrap();
         self.set_square(to, piece);
         self.clear_square(from);
     }
-
+    #[inline(always)]
     fn set_square(&mut self, square: usize, piece: Piece) {
         self.occupied_squares.set_bit(square);
         self.side_squares[piece.side()].set_bit(square); // Update kingside castling right
@@ -432,6 +431,8 @@ impl Board {
         self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
+
+    #[inline(always)]
     fn clear_square(&mut self, square: usize) {
         let piece = self.squares[square].unwrap();
         self.occupied_squares.clear_bit(square);
@@ -442,6 +443,7 @@ impl Board {
         self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
+    #[inline(always)]
     fn absolute_pins(&self) -> Bitboard {
         let king_square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
 
@@ -464,16 +466,19 @@ impl Board {
 
         pinned_squares
     }
+    #[inline(always)]
     fn xray_rook_attacks(&self, square: usize, blockers: Bitboard) -> Bitboard {
         let attacks = rook_attacks(square, self.occupied_squares);
         let attacked_blockers = blockers & attacks;
         attacks ^ rook_attacks(square, self.occupied_squares ^ attacked_blockers)
     }
+    #[inline(always)]
     fn xray_bishop_attacks(&self, square: usize, blockers: Bitboard) -> Bitboard {
         let attacks = bishop_attacks(square, self.occupied_squares);
         let attacked_blockers = blockers & attacks;
         attacks ^ bishop_attacks(square, self.occupied_squares ^ attacked_blockers)
     }
+    #[inline(always)]
     fn castling_rights_bits(castling_rights: [CastlingRights; 2]) -> usize {
         (castling_rights[Side::White].kingside as usize) << 3
             | (castling_rights[Side::White].queenside as usize) << 2
