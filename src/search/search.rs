@@ -38,7 +38,7 @@ pub fn search(time: f32, board: &mut Board) -> SearchResult {
 
     let start = Instant::now();
 
-    for depth in 1..=MAX_DEPTH as u32 {
+    for depth in 1..=1 as u32 {
         let mut highest_eval = i32::MIN;
 
         let mut moves = generate_moves(board);
@@ -52,6 +52,7 @@ pub fn search(time: f32, board: &mut Board) -> SearchResult {
 
             board.make_move(mov);
             let eval = -negamax(board, depth - 1, i32::MIN + 1, i32::MAX, 0, &mut search_state);
+            println!("Move: {}, Eval: {}", mov, eval);
             board.unmake_move(mov);
 
             if eval > highest_eval {

@@ -21,6 +21,7 @@ impl Default for OrderingParams {
 pub fn order_moves(board: &Board, moves: &mut [Move], ply: u32, ordering_params: &OrderingParams) {
     moves.sort_by(|a, b| compare_moves(*a, *b, board, ply, ordering_params));
 }
+
 fn compare_moves(a: Move, b: Move, board: &Board, ply: u32, ordering_params: &OrderingParams) -> Ordering {
     get_move_score(b, board, ply, ordering_params).cmp(&get_move_score(a, board, ply, ordering_params))
 }

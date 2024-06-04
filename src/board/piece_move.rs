@@ -1,5 +1,3 @@
-use bitflags::bitflags;
-
 use crate::board::piece::PieceType;
 use crate::board::{square_from_string, Board};
 use std::collections::HashMap;

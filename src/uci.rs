@@ -2,6 +2,7 @@ use std::io;
 use std::time::Instant;
 
 use crate::board::Board;
+use crate::move_generation::generate_moves;
 use crate::perft::perft;
 use crate::search::search;
 
@@ -93,7 +94,7 @@ impl Uci {
             }
             let moves = &words[(moves_index + 1)..];
             for mov in moves {
-                let all_moves = board.generate_moves();
+                let all_moves = generate_moves(&board);
                 all_moves.iter().enumerate().for_each(|(i, val)| {
                     if val.to_string() == *mov.to_string() {
                         board.make_move(all_moves[i]);

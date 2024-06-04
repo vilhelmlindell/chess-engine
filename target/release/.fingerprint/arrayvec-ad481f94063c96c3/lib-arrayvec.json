@@ -1,0 +1,1 @@
+{"rustc":3323483500999627516,"features":"[\"default\", \"std\"]","declared_features":"","target":9102904644320696625,"profile":9082472801063763326,"path":8974257855605113810,"deps":[],"local":[{"CheckDepInfo":{"dep_info":"release/.fingerprint/arrayvec-ad481f94063c96c3/dep-lib-arrayvec"}}],"rustflags":[],"metadata":5019420986621020735,"config":2202906307356721367,"compile_kind":0}

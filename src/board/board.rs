@@ -50,15 +50,6 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn generate_moves(&self) -> ArrayVec<Move, MAX_LEGAL_MOVES> {
-        move_generation::generate_moves(self)
-    }
-    pub fn evaluate(&self) -> i32 {
-        evaluation::evaluate(self)
-    }
-    pub fn search(&mut self, time: f32) -> SearchResult {
-        search::search(time, self)
-    }
     pub fn from_fen(fen: &str) -> Self {
         let mut board = Self::default();
         board.load_fen(fen);
@@ -618,6 +609,8 @@ impl Default for BoardState {
 
 #[cfg(test)]
 mod tests {
+    use self::move_generation::generate_moves;
+
     use super::*;
 
     #[test]
@@ -666,7 +659,7 @@ mod tests {
         let original = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         let mut board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         let zobrist_before = board.zobrist_hash;
-        for mov in board.generate_moves() {
+        for mov in generate_moves(&board) {
             board.make_move(mov);
             board.unmake_move(mov);
             println!();

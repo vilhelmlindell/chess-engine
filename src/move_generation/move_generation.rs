@@ -11,15 +11,16 @@ use std::cmp::Ordering;
 
 use arrayvec::ArrayVec;
 
-const WHITE_KINGSIDE_SQUARES: Bitboard = Bitboard(0x06000000000000000);
-const WHITE_KINGSIDE_KING_SQUARES: [usize; 2] = [61, 62];
-const WHITE_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x0E00000000000000);
-const WHITE_QUEENSIDE_KING_SQUARES: [usize; 2] = [59, 58];
-const BLACK_KINGSIDE_SQUARES: Bitboard = Bitboard(0x0000000000000060);
-const BLACK_KINGSIDE_KING_SQUARES: [usize; 2] = [5, 6];
-const BLACK_QUEENSIDE_SQUARES: Bitboard = Bitboard(0x000000000000000E);
-const BLACK_QUEENSIDE_KING_SQUARES: [usize; 2] = [3, 2];
 pub const MAX_LEGAL_MOVES: usize = 218;
+
+const WHITE_KINGSIDE_MASK: Bitboard = Bitboard(0x06000000000000000);
+const WHITE_KINGSIDE_SQUARES: [usize; 2] = [61, 62];
+const WHITE_QUEENSIDE_MASK: Bitboard = Bitboard(0x0E00000000000000);
+const WHITE_QUEENSIDE_SQUARES: [usize; 2] = [59, 58];
+const BLACK_KINGSIDE_MASK: Bitboard = Bitboard(0x0000000000000060);
+const BLACK_KINGSIDE_SQUARES: [usize; 2] = [5, 6];
+const BLACK_QUEENSIDE_MASK: Bitboard = Bitboard(0x000000000000000E);
+const BLACK_QUEENSIDE_SQUARES: [usize; 2] = [3, 2];
 
 pub fn generate_moves(board: &Board) -> ArrayVec<Move, MAX_LEGAL_MOVES> {
     let mut moves = ArrayVec::<Move, MAX_LEGAL_MOVES>::new();
@@ -182,18 +183,18 @@ fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
 fn generate_castling_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     match board.side {
         Side::White => {
-            if can_castle(board, WHITE_KINGSIDE_SQUARES, WHITE_KINGSIDE_KING_SQUARES) && board.state().castling_rights[Side::White].kingside {
+            if can_castle(board, WHITE_KINGSIDE_MASK, WHITE_KINGSIDE_SQUARES) && board.state().castling_rights[Side::White].kingside {
                 moves.push(Move::new(60, 62, MoveType::Castle { kingside: true }));
             }
-            if can_castle(board, WHITE_QUEENSIDE_SQUARES, WHITE_QUEENSIDE_KING_SQUARES) && board.state().castling_rights[Side::White].queenside {
+            if can_castle(board, WHITE_QUEENSIDE_MASK, WHITE_QUEENSIDE_SQUARES) && board.state().castling_rights[Side::White].queenside {
                 moves.push(Move::new(60, 58, MoveType::Castle { kingside: false }));
             }
         }
         Side::Black => {
-            if can_castle(board, BLACK_KINGSIDE_SQUARES, BLACK_KINGSIDE_KING_SQUARES) && board.state().castling_rights[Side::Black].kingside {
+            if can_castle(board, BLACK_KINGSIDE_MASK, BLACK_KINGSIDE_SQUARES) && board.state().castling_rights[Side::Black].kingside {
                 moves.push(Move::new(4, 6, MoveType::Castle { kingside: true }));
             }
-            if can_castle(board, BLACK_QUEENSIDE_SQUARES, BLACK_QUEENSIDE_KING_SQUARES) && board.state().castling_rights[Side::Black].queenside {
+            if can_castle(board, BLACK_QUEENSIDE_MASK, BLACK_QUEENSIDE_SQUARES) && board.state().castling_rights[Side::Black].queenside {
                 moves.push(Move::new(4, 2, MoveType::Castle { kingside: false }));
             }
         }
