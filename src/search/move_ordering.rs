@@ -27,8 +27,8 @@ fn compare_moves(a: Move, b: Move, board: &Board, ply: u32, ordering_params: &Or
 }
 fn get_move_score(mov: Move, board: &Board, ply: u32, ordering_params: &OrderingParams) -> i32 {
     let mut score = 0;
-    if let Some(captured_piece) = board.squares[mov.to] {
-        let piece = board.squares[mov.from].unwrap();
+    if let Some(captured_piece) = board.squares[mov.to()] {
+        let piece = board.squares[mov.from()].unwrap();
         let capture_score = captured_piece.piece_type().centipawns() - piece.piece_type().centipawns();
         score += CAPTURE_BASE_SCORE;
         score += capture_score;

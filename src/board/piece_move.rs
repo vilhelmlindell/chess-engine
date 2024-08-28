@@ -1,25 +1,44 @@
+use num::FromPrimitive;
+use num_derive::FromPrimitive;
+
 use crate::board::piece::PieceType;
 use crate::board::{square_from_string, Board};
 use std::collections::HashMap;
 use std::fmt::Display;
 
-#[derive(Default, PartialEq, Eq, Clone, Copy, Debug, Hash)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, FromPrimitive)]
+#[repr(u8)]
 pub enum MoveType {
-    #[default]
     Normal,
-    Castle {
-        kingside: bool,
-    },
+    KingsideCastle,
+    QueensideCastle,
     DoublePush,
     EnPassant,
-    Promotion(PieceType),
+    RookPromotion,
+    BishopPromotion,
+    QueenPromotion,
+    KnightPromotion,
 }
+
+impl MoveType {
+    pub const PROMOTIONS: [MoveType; 4] = [MoveType::BishopPromotion, MoveType::RookPromotion, MoveType::QueenPromotion, MoveType::KnightPromotion];
+
+    pub fn promotion_piece(&self) -> PieceType {
+        match self {
+            MoveType::KnightPromotion => PieceType::Knight,
+            MoveType::BishopPromotion => PieceType::Bishop,
+            MoveType::QueenPromotion => PieceType::Queen,
+            MoveType::RookPromotion => PieceType::Rook,
+            _ => panic!("Enum variant is not a promotion"),
+        }
+    }
+}
+
+type Square = usize;
 
 #[derive(Default, PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub struct Move {
-    pub from: usize,
-    pub to: usize,
-    pub move_type: MoveType,
+    bits: u16,
 }
 
 impl Move {
@@ -28,14 +47,19 @@ impl Move {
         assert!(end_square < 64, "end square can't be larger than 63");
 
         Move {
-            from: start_square,
-            to: end_square,
-            move_type,
+            bits: ((move_type as u16) << 12) | ((end_square as u16) << 6) | (start_square as u16),
         }
     }
-    //pub fn from() -> {}
-    //pub fn to() -> {}
-    //pub fn move_type() -> MoveType {}
+
+    pub fn from(&self) -> Square {
+        (self.bits & 0b111111) as Square
+    }
+    pub fn to(&self) -> Square {
+        ((self.bits & 0b111111000000) >> 6) as Square
+    }
+    pub fn move_type(&self) -> MoveType {
+        MoveType::from_u16((self.bits & 0b1111000000000000) >> 12).unwrap()
+    }
     pub fn from_long_algebraic(string: &str, board: &Board) -> Move {
         let start_square = square_from_string(&string[0..2]);
         let end_square = square_from_string(&string[2..4]);
@@ -59,9 +83,9 @@ impl Move {
 
         if piece_type == PieceType::King {
             if start_file - end_file == -2 {
-                move_type = MoveType::Castle { kingside: true };
+                move_type = MoveType::KingsideCastle;
             } else if start_file - end_file == 2 {
-                move_type = MoveType::Castle { kingside: false };
+                move_type = MoveType::QueensideCastle;
             }
         }
 
@@ -73,13 +97,14 @@ impl Display for Move {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let piece_chars = HashMap::from([(PieceType::Knight, 'n'), (PieceType::Bishop, 'b'), (PieceType::Rook, 'r'), (PieceType::Queen, 'q')]);
         let files = "abcdefgh";
-        let start_file = files.chars().nth(self.from % 8).unwrap();
-        let start_rank = (8 - self.from / 8).to_string();
-        let end_file = files.chars().nth(self.to % 8).unwrap();
-        let end_rank = (8 - self.to / 8).to_string();
+        let start_file = files.chars().nth(self.from() % 8).unwrap();
+        let start_rank = (8 - self.from() / 8).to_string();
+        let end_file = files.chars().nth(self.to() % 8).unwrap();
+        let end_rank = (8 - self.to() / 8).to_string();
         write!(f, "{}{}{}{}", start_file, start_rank, end_file, end_rank).unwrap();
-        if let MoveType::Promotion(piece) = self.move_type {
-            write!(f, "{}", piece_chars.get(&piece).unwrap()).unwrap();
+        if MoveType::PROMOTIONS.contains(&self.move_type()) {
+            let piece_type = self.move_type().promotion_piece();
+            write!(f, "{}", piece_chars.get(&piece_type).unwrap()).unwrap();
         }
         Ok(())
     }
@@ -93,8 +118,8 @@ impl PartialOrd for Move {
 
 impl Ord for Move {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let from_order = self.from.cmp(&other.from);
-        let to_order = self.to.cmp(&other.to);
+        let from_order = self.from().cmp(&other.from());
+        let to_order = self.to().cmp(&other.to());
 
         from_order.then(to_order)
     }

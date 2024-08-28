@@ -98,13 +98,13 @@ fn get_move_info(mov: Move, board: &Board, extra_info: bool) -> PerftResult {
         if board.state().captured_piece.is_some() {
             info.captures = 1;
         }
-        if mov.move_type == MoveType::EnPassant {
+        if mov.move_type() == MoveType::EnPassant {
             info.en_passants = 1;
         }
-        if let MoveType::Castle { kingside: _ } = mov.move_type {
+        if mov.move_type() == MoveType::KingsideCastle || mov.move_type() == MoveType::QueensideCastle {
             info.castles = 1;
         }
-        if let MoveType::Promotion(_) = mov.move_type {
+        if MoveType::PROMOTIONS.contains(&mov.move_type()) {
             info.promotions = 1;
         }
         let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
@@ -113,7 +113,7 @@ fn get_move_info(mov: Move, board: &Board, extra_info: bool) -> PerftResult {
             info.checks = 1;
             while attackers != 0 {
                 let attacker_square = attackers.pop_lsb();
-                if Bitboard::from_square(mov.from) & BETWEEN_RAYS[attacker_square][king_square] != 0 {
+                if Bitboard::from_square(mov.from()) & BETWEEN_RAYS[attacker_square][king_square] != 0 {
                     info.discovered_checks = 1;
                 }
             }

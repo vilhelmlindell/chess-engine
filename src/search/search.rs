@@ -22,11 +22,13 @@ pub struct SearchState {
 pub struct SearchResult {
     pub best_move: Option<Move>,
     pub depth_reached: u32,
-    pub positions_evaluated: u32,
+    pub nodes: u32,
     pub transpositions: u32,
+    pub evaluation: i32,
+    pub time: f32,
 }
 
-pub fn search(time: f32, board: &mut Board) -> SearchResult {
+pub fn search(max_time: f32, board: &mut Board) -> SearchResult {
     board.transposition_table.clear();
 
     let mut search_state = SearchState::default();
@@ -38,21 +40,24 @@ pub fn search(time: f32, board: &mut Board) -> SearchResult {
 
     let start = Instant::now();
 
-    for depth in 1..=1 as u32 {
+    for depth in 1..=MAX_DEPTH as u32 {
         let mut highest_eval = i32::MIN;
 
         let mut moves = generate_moves(board);
         order_moves(board, &mut moves, 0, &search_state.ordering_params);
 
         for mov in moves {
-            if start.elapsed().as_secs_f32() > time {
+            let time_searched = start.elapsed().as_secs_f32();
+            if time_searched > max_time {
                 search_state.result.depth_reached = (depth as i32 - 1) as u32;
+                search_state.result.time = time_searched;
+                search_state.result.evaluation = highest_eval;
                 return search_state.result;
             }
 
             board.make_move(mov);
             let eval = -negamax(board, depth - 1, i32::MIN + 1, i32::MAX, 0, &mut search_state);
-            println!("Move: {}, Eval: {}", mov, eval);
+            //println!("Move: {}, Eval: {}", mov, eval);
             board.unmake_move(mov);
 
             if eval > highest_eval {
@@ -61,28 +66,26 @@ pub fn search(time: f32, board: &mut Board) -> SearchResult {
             }
         }
     }
-    search_state.result.depth_reached = (MAX_DEPTH - 1) as u32;
+    //search_state.result.depth_reached = (MAX_DEPTH - 1) as u32;
     search_state.result
 }
 
 pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32, state: &mut SearchState) -> i32 {
+    state.result.nodes += 1;
     if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
         if entry.hash == board.zobrist_hash && entry.depth >= depth {
             state.result.transpositions += 1;
             match entry.node_type {
                 NodeType::Exact => {
-                    state.result.positions_evaluated += 1;
                     return entry.eval;
                 }
                 NodeType::LowerBound => {
                     if entry.eval <= alpha {
-                        state.result.positions_evaluated += 1;
                         return entry.eval;
                     }
                 }
                 NodeType::UpperBound => {
                     if entry.eval >= beta {
-                        state.result.positions_evaluated += 1;
                         return entry.eval;
                     }
                 }
@@ -93,7 +96,6 @@ pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u3
     // Depth limit reached
     if depth == 0 {
         let eval = quiescence_search(board, alpha, beta, ply + 1, state);
-        state.result.positions_evaluated += 1;
         return eval;
     }
 
@@ -121,7 +123,7 @@ pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u3
         if eval >= beta {
             let entry = TranspositionEntry::new(depth, beta, mov, NodeType::LowerBound, board.zobrist_hash);
             board.transposition_table.store(entry);
-            if board.squares[mov.to].is_none() {
+            if board.squares[mov.to()].is_none() {
                 state.ordering_params.killer_moves[ply as usize].rotate_right(1);
                 state.ordering_params.killer_moves[ply as usize][0] = Some(mov);
             }
@@ -142,6 +144,7 @@ pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u3
 }
 
 fn quiescence_search(board: &mut Board, mut alpha: i32, beta: i32, ply: u32, state: &mut SearchState) -> i32 {
+    state.result.nodes += 1;
     let stand_pat = evaluate(board);
     if stand_pat >= beta {
         return beta;

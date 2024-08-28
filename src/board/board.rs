@@ -5,12 +5,12 @@ use super::piece_move::{Move, MoveType};
 use super::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
 use crate::evaluation;
 use crate::evaluation::piece_square_tables::position_value;
-use crate::move_generation;
 use crate::move_generation::attack_tables::*;
 use crate::move_generation::MAX_LEGAL_MOVES;
 use crate::search::search::{self, SearchResult};
 use crate::search::transposition_table::*;
 use arrayvec::ArrayVec;
+use num_enum::UnsafeFromPrimitive;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
@@ -141,7 +141,7 @@ impl Board {
         self.states.last_mut().unwrap()
     }
     pub fn is_capture(&self, mov: Move) -> bool {
-        Option::is_some(&self.squares[mov.to])
+        Option::is_some(&self.squares[mov.to()])
     }
 
     pub fn load_fen(&mut self, fen: &str) {
@@ -208,21 +208,22 @@ impl Board {
         }
         self.zobrist_hash = get_zobrist_hash(self);
     }
+    #[inline(always)]
     pub fn make_move(&mut self, mov: Move) {
         let mut state = BoardState::from_state(self.state());
 
         let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
 
-        if mov.from == 0 || mov.from == 4 || mov.to == 0 {
+        if mov.from() == 0 || mov.from() == 4 || mov.to() == 0 {
             state.castling_rights[Side::Black].queenside = false;
         }
-        if mov.from == 7 || mov.from == 4 || mov.to == 7 {
+        if mov.from() == 7 || mov.from() == 4 || mov.to() == 7 {
             state.castling_rights[Side::Black].kingside = false;
         }
-        if mov.from == 56 || mov.from == 60 || mov.to == 56 {
+        if mov.from() == 56 || mov.from() == 60 || mov.to() == 56 {
             state.castling_rights[Side::White].queenside = false;
         }
-        if mov.from == 63 || mov.from == 60 || mov.to == 63 {
+        if mov.from() == 63 || mov.from() == 60 || mov.to() == 63 {
             state.castling_rights[Side::White].kingside = false;
         }
 
@@ -230,8 +231,8 @@ impl Board {
 
         self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
 
-        if let Some(captured_piece) = self.squares[mov.to] {
-            self.clear_square(mov.to);
+        if let Some(captured_piece) = self.squares[mov.to()] {
+            self.clear_square(mov.to());
             state.captured_piece = Some(captured_piece);
         }
 
@@ -240,28 +241,22 @@ impl Board {
             self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
         }
 
-        self.move_piece(mov.from, mov.to);
+        self.move_piece(mov.from(), mov.to());
 
-        match mov.move_type {
+        match mov.move_type() {
             MoveType::Normal => {}
-            MoveType::Castle { kingside } => {
-                let (rook_from, rook_to) = match (self.side, kingside) {
-                    (Side::White, true) => (63, 61),
-                    (Side::White, false) => (56, 59),
-                    (Side::Black, true) => (7, 5),
-                    (Side::Black, false) => (0, 3),
-                };
+            MoveType::KingsideCastle => {
+                let (rook_from, rook_to) = if self.side == Side::White { (63, 61) } else { (7, 5) };
+                self.move_piece(rook_from, rook_to);
+            }
+            MoveType::QueensideCastle => {
+                let (rook_from, rook_to) = if self.side == Side::White { (56, 59) } else { (0, 3) };
                 self.move_piece(rook_from, rook_to);
             }
             MoveType::DoublePush => {
-                state.en_passant_square = Some((mov.to as i32 + Direction::down(self.side).value()) as usize);
+                state.en_passant_square = Some((mov.to() as i32 + Direction::down(self.side).value()) as usize);
                 let file = state.en_passant_square.unwrap() % 8;
                 self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[file];
-            }
-            MoveType::Promotion(piece_type) => {
-                let piece = Piece::new(piece_type, self.side);
-                self.clear_square(mov.to);
-                self.set_square(mov.to, piece);
             }
             MoveType::EnPassant => {
                 let en_passant_square = self.state().en_passant_square.unwrap();
@@ -270,6 +265,12 @@ impl Board {
                 self.clear_square(capture_square);
                 state.captured_piece = Some(captured_piece);
             }
+            MoveType::RookPromotion | MoveType::QueenPromotion | MoveType::BishopPromotion | MoveType::KnightPromotion => {
+                let piece_type = mov.move_type().promotion_piece();
+                let piece = Piece::new(piece_type, self.side);
+                self.clear_square(mov.to());
+                self.set_square(mov.to(), piece);
+            }
         }
 
         self.side = self.side.enemy();
@@ -277,28 +278,28 @@ impl Board {
         self.absolute_pinned_squares = self.absolute_pins();
         self.states.push(state);
     }
+    #[inline(always)]
     pub fn unmake_move(&mut self, mov: Move) {
         self.side = self.side.enemy();
         self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
 
         let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
 
-        self.move_piece(mov.to, mov.from);
+        self.move_piece(mov.to(), mov.from());
 
-        if mov.move_type != MoveType::EnPassant {
+        if mov.move_type() != MoveType::EnPassant {
             if let Some(piece) = self.state_mut().captured_piece {
-                self.set_square(mov.to, piece);
+                self.set_square(mov.to(), piece);
             }
         }
 
-        match mov.move_type {
-            MoveType::Castle { kingside } => {
-                let (rook_from, rook_to) = match (self.side, kingside) {
-                    (Side::White, true) => (61, 63),
-                    (Side::White, false) => (59, 56),
-                    (Side::Black, true) => (5, 7),
-                    (Side::Black, false) => (3, 0),
-                };
+        match mov.move_type() {
+            MoveType::KingsideCastle => {
+                let (rook_from, rook_to) = if self.side == Side::White { (61, 63) } else { (5, 7) };
+                self.move_piece(rook_from, rook_to);
+            }
+            MoveType::QueensideCastle => {
+                let (rook_from, rook_to) = if self.side == Side::White { (59, 56) } else { (3, 0) };
                 self.move_piece(rook_from, rook_to);
             }
             MoveType::DoublePush => {
@@ -310,10 +311,10 @@ impl Board {
                 let captured_pawn = Piece::new(PieceType::Pawn, self.side.enemy());
                 self.set_square(square, captured_pawn);
             }
-            MoveType::Promotion(_) => {
+            MoveType::RookPromotion | MoveType::QueenPromotion | MoveType::BishopPromotion | MoveType::KnightPromotion => {
                 let pawn = Piece::new(PieceType::Pawn, self.side);
-                self.clear_square(mov.from);
-                self.set_square(mov.from, pawn);
+                self.clear_square(mov.from());
+                self.set_square(mov.from(), pawn);
             }
             _ => {}
         }
@@ -330,6 +331,7 @@ impl Board {
 
         self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
     }
+    #[inline(always)]
     pub fn attacked(&self, square: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
         if (PAWN_ATTACKS[self.side.enemy()][square] & pawns).0 != 0 {
@@ -350,6 +352,7 @@ impl Board {
         }
         false
     }
+    #[inline(always)]
     pub fn attackers(&self, square: usize, side: Side) -> Bitboard {
         let mut attackers = Bitboard(0);
 
@@ -369,6 +372,7 @@ impl Board {
 
         attackers
     }
+    #[inline(always)]
     pub fn king_attacked(&self, from: usize, to: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
         if (PAWN_ATTACKS[self.side.enemy()][to] & pawns).0 != 0 {
@@ -390,6 +394,7 @@ impl Board {
         }
         false
     }
+    #[inline(always)]
     pub fn aligned(square1: usize, square2: usize, square3: usize) -> bool {
         LINE_RAYS[square1][square2] & Bitboard::from_square(square3) != 0
     }
@@ -533,7 +538,8 @@ impl Display for Board {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, UnsafeFromPrimitive)]
+#[repr(u8)]
 pub enum Side {
     White = 0,
     Black,
@@ -609,9 +615,8 @@ impl Default for BoardState {
 
 #[cfg(test)]
 mod tests {
-    use self::move_generation::generate_moves;
-
     use super::*;
+    use crate::move_generation::generate_moves;
 
     #[test]
     fn test_load_fen() {

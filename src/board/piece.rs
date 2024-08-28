@@ -1,66 +1,37 @@
+use num_enum::UnsafeFromPrimitive;
+
 use crate::board::Side;
 use std::ops::{Index, IndexMut};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, UnsafeFromPrimitive)]
+#[repr(u8)]
 pub enum Piece {
-    WhitePawn = 0,
-    WhiteBishop,
-    WhiteKnight,
-    WhiteRook,
-    WhiteQueen,
-    WhiteKing,
-    BlackPawn,
-    BlackBishop,
-    BlackKnight,
-    BlackRook,
-    BlackQueen,
-    BlackKing,
+    WhitePawn = Side::White as u8 | (PieceType::Pawn as u8) << 1,
+    WhiteKnight = Side::White as u8 | (PieceType::Knight as u8) << 1,
+    WhiteBishop = Side::White as u8 | (PieceType::Bishop as u8) << 1,
+    WhiteRook = Side::White as u8 | (PieceType::Rook as u8) << 1,
+    WhiteQueen = Side::White as u8 | (PieceType::Queen as u8) << 1,
+    WhiteKing = Side::White as u8 | (PieceType::King as u8) << 1,
+    BlackPawn = Side::Black as u8 | (PieceType::Pawn as u8) << 1,
+    BlackKnight = Side::Black as u8 | (PieceType::Knight as u8) << 1,
+    BlackBishop = Side::Black as u8 | (PieceType::Bishop as u8) << 1,
+    BlackRook = Side::Black as u8 | (PieceType::Rook as u8) << 1,
+    BlackQueen = Side::Black as u8 | (PieceType::Queen as u8) << 1,
+    BlackKing = Side::Black as u8 | (PieceType::King as u8) << 1,
 }
 
 impl Piece {
+    const PIECE_MASK: u8 = 0b1110;
+    const SIDE_MASK: u8 = 0b0001;
+
     pub fn new(piece_type: PieceType, side: Side) -> Piece {
-        match piece_type {
-            PieceType::Pawn => match &side {
-                Side::White => Piece::WhitePawn,
-                Side::Black => Piece::BlackPawn,
-            },
-            PieceType::Bishop => match &side {
-                Side::White => Piece::WhiteBishop,
-                Side::Black => Piece::BlackBishop,
-            },
-            PieceType::Knight => match &side {
-                Side::White => Piece::WhiteKnight,
-                Side::Black => Piece::BlackKnight,
-            },
-            PieceType::Rook => match &side {
-                Side::White => Piece::WhiteRook,
-                Side::Black => Piece::BlackRook,
-            },
-            PieceType::Queen => match &side {
-                Side::White => Piece::WhiteQueen,
-                Side::Black => Piece::BlackQueen,
-            },
-            PieceType::King => match &side {
-                Side::White => Piece::WhiteKing,
-                Side::Black => Piece::BlackKing,
-            },
-        }
+        unsafe { Piece::unchecked_transmute_from(((piece_type as u8) << 1) | (side as u8)) }
     }
     pub fn piece_type(&self) -> PieceType {
-        match self {
-            Piece::WhitePawn | Piece::BlackPawn => PieceType::Pawn,
-            Piece::WhiteKnight | Piece::BlackKnight => PieceType::Knight,
-            Piece::WhiteBishop | Piece::BlackBishop => PieceType::Bishop,
-            Piece::WhiteRook | Piece::BlackRook => PieceType::Rook,
-            Piece::WhiteQueen | Piece::BlackQueen => PieceType::Queen,
-            Piece::WhiteKing | Piece::BlackKing => PieceType::King,
-        }
+        unsafe { PieceType::unchecked_transmute_from(((*self as u8) & Piece::PIECE_MASK) >> 1) }
     }
     pub fn side(&self) -> Side {
-        match self {
-            Piece::WhitePawn | Piece::WhiteKnight | Piece::WhiteBishop | Piece::WhiteRook | Piece::WhiteQueen | Piece::WhiteKing => Side::White,
-            Piece::BlackPawn | Piece::BlackKnight | Piece::BlackBishop | Piece::BlackRook | Piece::BlackQueen | Piece::BlackKing => Side::Black,
-        }
+        unsafe { Side::unchecked_transmute_from((*self as u8) & Piece::SIDE_MASK) }
     }
     pub fn all() -> [Piece; 12] {
         [
@@ -80,14 +51,15 @@ impl Piece {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, UnsafeFromPrimitive)]
+#[repr(u8)]
 pub enum PieceType {
-    Pawn = 0,
-    Knight,
-    Bishop,
-    Rook,
-    Queen,
-    King,
+    Pawn = 0b000,
+    Knight = 0b001,
+    Bishop = 0b010,
+    Rook = 0b011,
+    Queen = 0b100,
+    King = 0b101,
 }
 
 impl PieceType {
@@ -103,9 +75,6 @@ impl PieceType {
     }
     pub fn is_slider(&self) -> bool {
         matches!(self, PieceType::Bishop | PieceType::Rook | PieceType::Queen)
-    }
-    pub fn promotions() -> [PieceType; 4] {
-        [PieceType::Knight, PieceType::Bishop, PieceType::Rook, PieceType::Queen]
     }
 }
 

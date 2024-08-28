@@ -52,6 +52,7 @@ pub fn generate_moves(board: &Board) -> ArrayVec<Move, MAX_LEGAL_MOVES> {
     moves
 }
 
+#[inline(always)]
 fn generate_pawn_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let up_left: Direction = match board.side {
         Side::White => Direction::NorthWest,
@@ -88,9 +89,9 @@ fn generate_pawn_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
     }
 
     if promoted_pawns != 0 {
-        for piece_type in PieceType::promotions() {
+        for promotion_type in MoveType::PROMOTIONS {
             add_moves_from_bitboard(
-                &|to| Move::new((to as i32 - Direction::up(board.side).value()) as usize, to, MoveType::Promotion(piece_type)),
+                &|to| Move::new((to as i32 - Direction::up(board.side).value()) as usize, to, promotion_type),
                 moves,
                 promoted_pawns,
                 board,
@@ -107,13 +108,8 @@ fn generate_pawn_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
     }
 
     if promoted_pawns != 0 {
-        for piece_type in PieceType::promotions() {
-            add_moves_from_bitboard(
-                &|to| Move::new((to as i32 - up_left.value()) as usize, to, MoveType::Promotion(piece_type)),
-                moves,
-                promoted_pawns,
-                board,
-            );
+        for promotion_type in MoveType::PROMOTIONS {
+            add_moves_from_bitboard(&|to| Move::new((to as i32 - up_left.value()) as usize, to, promotion_type), moves, promoted_pawns, board);
         }
     }
     let mut capturing_pawns_up_right = bitboard.shift(up_right) & board.enemy_squares();
@@ -123,18 +119,14 @@ fn generate_pawn_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
     add_moves_from_bitboard(&|to| Move::new((to as i32 - up_right.value()) as usize, to, MoveType::Normal), moves, capturing_pawns_up_right, board);
 
     if promoted_pawns != 0 {
-        for piece_type in PieceType::promotions() {
-            add_moves_from_bitboard(
-                &|to| Move::new((to as i32 - up_right.value()) as usize, to, MoveType::Promotion(piece_type)),
-                moves,
-                promoted_pawns,
-                board,
-            );
+        for promotion_type in MoveType::PROMOTIONS {
+            add_moves_from_bitboard(&|to| Move::new((to as i32 - up_right.value()) as usize, to, promotion_type), moves, promoted_pawns, board);
         }
     }
 
     generate_en_passant_moves(moves, board);
 }
+#[inline(always)]
 fn generate_knight_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Knight, board.side)];
 
@@ -143,6 +135,7 @@ fn generate_knight_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Bo
         add_moves_from_bitboard(&|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
+#[inline(always)]
 fn generate_bishop_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Bishop, board.side)];
 
@@ -151,24 +144,25 @@ fn generate_bishop_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Bo
         add_moves_from_bitboard(&|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
+#[inline(always)]
 fn generate_rook_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Rook, board.side)];
 
     for from in bitboard {
         let attack_bitboard = rook_attacks(from, board.occupied_squares) & !board.friendly_squares();
-
         add_moves_from_bitboard(&|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
+#[inline(always)]
 fn generate_queen_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Queen, board.side)];
 
     for from in bitboard {
         let attack_bitboard = queen_attacks(from, board.occupied_squares) & !board.friendly_squares();
-
         add_moves_from_bitboard(&|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
+#[inline(always)]
 fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let from = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
     let enemy_king_square = board.piece_squares[Piece::new(PieceType::King, board.side.enemy())];
@@ -180,26 +174,28 @@ fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
         }
     }
 }
+#[inline(always)]
 fn generate_castling_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     match board.side {
         Side::White => {
             if can_castle(board, WHITE_KINGSIDE_MASK, WHITE_KINGSIDE_SQUARES) && board.state().castling_rights[Side::White].kingside {
-                moves.push(Move::new(60, 62, MoveType::Castle { kingside: true }));
+                moves.push(Move::new(60, 62, MoveType::KingsideCastle));
             }
             if can_castle(board, WHITE_QUEENSIDE_MASK, WHITE_QUEENSIDE_SQUARES) && board.state().castling_rights[Side::White].queenside {
-                moves.push(Move::new(60, 58, MoveType::Castle { kingside: false }));
+                moves.push(Move::new(60, 58, MoveType::QueensideCastle));
             }
         }
         Side::Black => {
             if can_castle(board, BLACK_KINGSIDE_MASK, BLACK_KINGSIDE_SQUARES) && board.state().castling_rights[Side::Black].kingside {
-                moves.push(Move::new(4, 6, MoveType::Castle { kingside: true }));
+                moves.push(Move::new(4, 6, MoveType::KingsideCastle));
             }
             if can_castle(board, BLACK_QUEENSIDE_MASK, BLACK_QUEENSIDE_SQUARES) && board.state().castling_rights[Side::Black].queenside {
-                moves.push(Move::new(4, 2, MoveType::Castle { kingside: false }));
+                moves.push(Move::new(4, 2, MoveType::QueensideCastle));
             }
         }
     };
 }
+#[inline(always)]
 fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     if let Some(to) = board.state().en_passant_square {
         let mut en_passant_pawns = board.piece_squares[Piece::new(PieceType::Pawn, board.side)] & PAWN_ATTACKS[board.side][to];
@@ -261,6 +257,7 @@ fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board:
         }
     }
 }
+#[inline(always)]
 fn resolve_single_check(attacker_square: usize, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
 
@@ -273,9 +270,9 @@ fn resolve_single_check(attacker_square: usize, moves: &mut ArrayVec<Move, MAX_L
         let promoting_pawns = pushed_pawns & (RANK_1 | RANK_8);
         if promoting_pawns != 0 {
             pushed_pawns ^= promoting_pawns;
-            for piece_type in PieceType::promotions() {
+            for promotion_type in MoveType::PROMOTIONS {
                 add_moves_from_bitboard(
-                    &|to| Move::new((to as i32 + Direction::down(board.side).value()) as usize, to, MoveType::Promotion(piece_type)),
+                    &|to| Move::new((to as i32 + Direction::down(board.side).value()) as usize, to, promotion_type),
                     moves,
                     promoting_pawns & attack_ray,
                     board,
@@ -284,19 +281,24 @@ fn resolve_single_check(attacker_square: usize, moves: &mut ArrayVec<Move, MAX_L
         }
         let rank = if board.side == Side::White { RANK_3 } else { RANK_6 };
         let double_pushed_pawns = push_pawns(pushed_pawns & rank, !board.occupied_squares, board.side);
-        add_moves_from_bitboard(
-            &|to| Move::new((to as i32 + Direction::down(board.side).value()) as usize, to, MoveType::Normal),
-            moves,
-            pushed_pawns & attack_ray,
-            board,
-        );
 
-        add_moves_from_bitboard(
-            &|to| Move::new((to as i32 + Direction::down(board.side).value() * 2) as usize, to, MoveType::DoublePush),
-            moves,
-            double_pushed_pawns & attack_ray,
-            board,
-        );
+        if pushed_pawns != 0 {
+            add_moves_from_bitboard(
+                &|to| Move::new((to as i32 + Direction::down(board.side).value()) as usize, to, MoveType::Normal),
+                moves,
+                pushed_pawns & attack_ray,
+                board,
+            );
+        }
+
+        if double_pushed_pawns != 0 {
+            add_moves_from_bitboard(
+                &|to| Move::new((to as i32 + Direction::down(board.side).value() * 2) as usize, to, MoveType::DoublePush),
+                moves,
+                double_pushed_pawns & attack_ray,
+                board,
+            );
+        }
 
         // look for en passant blocks or captures
         if let Some(to) = board.state().en_passant_square {
@@ -323,8 +325,8 @@ fn resolve_single_check(attacker_square: usize, moves: &mut ArrayVec<Move, MAX_L
     let promoting_pawns = (capturers & board.piece_squares[Piece::new(PieceType::Pawn, board.side)]) & if board.side == Side::White { RANK_7 } else { RANK_2 };
     if promoting_pawns != 0 {
         capturers ^= promoting_pawns;
-        for piece_type in PieceType::promotions() {
-            add_moves_from_bitboard(&|from| Move::new(from, attacker_square, MoveType::Promotion(piece_type)), moves, promoting_pawns, board);
+        for promotion_type in MoveType::PROMOTIONS {
+            add_moves_from_bitboard(&|from| Move::new(from, attacker_square, promotion_type), moves, promoting_pawns, board);
         }
     }
     add_moves_from_bitboard(&|from| Move::new(from, attacker_square, MoveType::Normal), moves, capturers, board);
@@ -342,7 +344,7 @@ fn add_moves_from_bitboard<F: Fn(usize) -> Move>(mov: &F, moves: &mut ArrayVec<M
 fn legal(board: &Board, mov: Move) -> bool {
     // a non king move is only legal if the piece isn't pinned or it's moving along the ray
     // between the piece and the king
-    board.absolute_pinned_squares.bit(mov.from) == 0 || Board::aligned(mov.to, mov.from, board.piece_squares[Piece::new(PieceType::King, board.side)].lsb())
+    board.absolute_pinned_squares.bit(mov.from()) == 0 || Board::aligned(mov.to(), mov.from(), board.piece_squares[Piece::new(PieceType::King, board.side)].lsb())
 }
 #[inline(always)]
 fn push_pawns(pawns: Bitboard, empty_squares: Bitboard, side_to_move: Side) -> Bitboard {
