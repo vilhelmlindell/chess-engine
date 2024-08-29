@@ -5,8 +5,8 @@ use crate::evaluation::piece_square_tables::*;
 pub fn evaluate(board: &Board) -> i32 {
     let endgame_weight = 1.0 - (board.side_squares[board.side.enemy()].count_ones() as f32 / 16.0);
     let mut eval = (board.material_balance * board.side.factor()) as f32;
-    eval += (1.0 - endgame_weight) * (board.position_balance * board.side.factor()) as f32;
-    eval += corner_king_evaluation(board) as f32 * endgame_weight * endgame_weight * 15.0;
+    eval += (board.position_balance * board.side.factor()) as f32;
+    eval += corner_king_evaluation(board) as f32 * endgame_weight * endgame_weight * endgame_weight * 15.0;
     eval as i32
 }
 fn corner_king_evaluation(board: &Board) -> i32 {

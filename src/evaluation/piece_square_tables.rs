@@ -64,6 +64,67 @@ mod unformatted {
          20, 30, 10,  0,  0, 10, 30, 20
     ];
 
+    const ENDGAME_PAWN_SQUARE_TABLE: [i32; 64] = [
+         0,  0,  0,  0,  0,  0,  0,  0,
+        50, 50, 50, 50, 50, 50, 50, 50,
+        10, 10, 20, 30, 30, 20, 10, 10,
+         5,  5, 10, 25, 25, 10,  5,  5,
+         0,  0,  0, 20, 20,  0,  0,  0,
+         5, -5,-10,  0,  0,-10, -5,  5,
+         5, 10, 10,-20,-20, 10, 10,  5,
+         0,  0,  0,  0,  0,  0,  0,  0
+    ];
+    const ENDGAME_KNIGHT_SQUARE_TABLE: [i32; 64] = [
+        -50,-40,-30,-30,-30,-30,-40,-50,
+        -40,-20,  0,  0,  0,  0,-20,-40,
+        -30,  0, 10, 15, 15, 10,  0,-30,
+        -30,  5, 15, 20, 20, 15,  5,-30,
+        -30,  0, 15, 20, 20, 15,  0,-30,
+        -30,  5, 10, 15, 15, 10,  5,-30,
+        -40,-20,  0,  5,  5,  0,-20,-40,
+        -50,-40,-30,-30,-30,-30,-40,-50,
+    ];
+    const ENDGAME_BISHOP_SQUARE_TABLE: [i32; 64] = [
+        -20,-10,-10,-10,-10,-10,-10,-20,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -10,  0,  5, 10, 10,  5,  0,-10,
+        -10,  5,  5, 10, 10,  5,  5,-10,
+        -10,  0, 10, 10, 10, 10,  0,-10,
+        -10, 10, 10, 10, 10, 10, 10,-10,
+        -10,  5,  0,  0,  0,  0,  5,-10,
+        -20,-10,-10,-10,-10,-10,-10,-20,
+    ];
+    const ENDGAME_ROOK_SQUARE_TABLE: [i32; 64] = [
+         0,  0,  0,  0,  0,  0,  0,  0,
+         5, 10, 10, 10, 10, 10, 10,  5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+        -5,  0,  0,  0,  0,  0,  0, -5,
+         0,  0,  0,  5,  5,  0,  0,  0
+    ];
+    const ENDGAME_QUEEN_SQUARE_TABLE: [i32; 64] = [
+        -20,-10,-10, -5, -5,-10,-10,-20,
+        -10,  0,  0,  0,  0,  0,  0,-10,
+        -10,  0,  5,  5,  5,  5,  0,-10,
+         -5,  0,  5,  5,  5,  5,  0, -5,
+          0,  0,  5,  5,  5,  5,  0, -5,
+        -10,  5,  5,  5,  5,  5,  0,-10,
+        -10,  0,  5,  0,  0,  0,  0,-10,
+        -20,-10,-10, -5, -5,-10,-10,-20
+    ];
+    const ENDGAME_KING_SQUARE_TABLE: [i32; 64] = [
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -30,-40,-40,-50,-50,-40,-40,-30,
+        -20,-30,-30,-40,-40,-30,-30,-20,
+        -10,-20,-20,-20,-20,-20,-20,-10,
+         20, 20,  0,  0,  0,  0, 20, 20,
+         20, 30, 10,  0,  0, 10, 30, 20
+    ];
+
     pub const CENTER_DISTANCE_TABLE: [i32; 64] = [
          6, 5, 4, 3, 3, 4, 5, 6,
          5, 4, 3, 2, 2, 3, 4, 5,
@@ -75,12 +136,19 @@ mod unformatted {
          6, 5, 4, 3, 3, 4, 5, 6
     ];
 
-    const PIECE_SQUARE_TABLES: [[i32; 64]; 6] = [OPENING_PAWN_SQUARE_TABLE, OPENING_KNIGHT_SQUARE_TABLE, OPENING_BISHOP_SQUARE_TABLE, OPENING_ROOK_SQUARE_TABLE, OPENING_QUEEN_SQUARE_TABLE, OPENING_KING_SQUARE_TABLE];
+    const OPENING_PIECE_SQUARE_TABLES: [[i32; 64]; 6] = [OPENING_PAWN_SQUARE_TABLE, OPENING_KNIGHT_SQUARE_TABLE, OPENING_BISHOP_SQUARE_TABLE, OPENING_ROOK_SQUARE_TABLE, OPENING_QUEEN_SQUARE_TABLE, OPENING_KING_SQUARE_TABLE];
+    const ENDGAME_PIECE_SQUARE_TABLES: [[i32; 64]; 6] = [ENDGAME_PAWN_SQUARE_TABLE, ENDGAME_KNIGHT_SQUARE_TABLE, ENDGAME_BISHOP_SQUARE_TABLE, ENDGAME_ROOK_SQUARE_TABLE, ENDGAME_QUEEN_SQUARE_TABLE, ENDGAME_KING_SQUARE_TABLE];
 
-    pub fn position_value(piece_type: PieceType, square: usize, side: Side) -> i32 {
+    pub fn opening_position_value(piece_type: PieceType, square: usize, side: Side) -> i32 {
         match side {
-            Side::White => PIECE_SQUARE_TABLES[piece_type][square],
-            Side::Black => PIECE_SQUARE_TABLES[piece_type][i32::abs(56 - square as i32) as usize]
+            Side::White => OPENING_PIECE_SQUARE_TABLES[piece_type][square],
+            Side::Black => OPENING_PIECE_SQUARE_TABLES[piece_type][i32::abs(56 - square as i32) as usize]
+        }
+    }
+    pub fn endgame_position_value(piece_type: PieceType, square: usize, side: Side) -> i32 {
+        match side {
+            Side::White => ENDGAME_PIECE_SQUARE_TABLES[piece_type][square],
+            Side::Black => ENDGAME_PIECE_SQUARE_TABLES[piece_type][i32::abs(56 - square as i32) as usize]
         }
     }
 }
