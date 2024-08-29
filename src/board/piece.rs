@@ -73,6 +73,16 @@ impl PieceType {
             PieceType::King => 20000,
         }
     }
+    pub const fn phase(&self) -> i32 {
+        match self {
+            PieceType::Pawn => 1,
+            PieceType::Knight => 2,
+            PieceType::Bishop => 2,
+            PieceType::Rook => 3,
+            PieceType::Queen => 5,
+            PieceType::King => 0,
+        }
+    }
     pub fn is_slider(&self) -> bool {
         matches!(self, PieceType::Bishop | PieceType::Rook | PieceType::Queen)
     }

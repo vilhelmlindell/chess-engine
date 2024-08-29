@@ -1,12 +1,11 @@
-use num::FromPrimitive;
-use num_derive::FromPrimitive;
+use num_enum::UnsafeFromPrimitive;
 
 use crate::board::piece::PieceType;
 use crate::board::{square_from_string, Board};
 use std::collections::HashMap;
 use std::fmt::Display;
 
-#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, FromPrimitive)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, UnsafeFromPrimitive)]
 #[repr(u8)]
 pub enum MoveType {
     Normal,
@@ -58,7 +57,7 @@ impl Move {
         ((self.bits & 0b111111000000) >> 6) as Square
     }
     pub fn move_type(&self) -> MoveType {
-        MoveType::from_u16((self.bits & 0b1111000000000000) >> 12).unwrap()
+        unsafe { MoveType::unchecked_transmute_from(((self.bits & 0b1111000000000000) >> 12) as u8) }
     }
     pub fn from_long_algebraic(string: &str, board: &Board) -> Move {
         let start_square = square_from_string(&string[0..2]);

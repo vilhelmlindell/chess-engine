@@ -4,7 +4,7 @@ use super::piece::{Piece, PieceType};
 use super::piece_move::{Move, MoveType};
 use super::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
 use crate::evaluation;
-use crate::evaluation::piece_square_tables::position_value;
+use crate::evaluation::piece_square_tables::{endgame_position_value, midgame_position_value};
 use crate::move_generation::attack_tables::*;
 use crate::move_generation::MAX_LEGAL_MOVES;
 use crate::search::search::{self, SearchResult};
@@ -44,7 +44,8 @@ pub struct Board {
     pub absolute_pinned_squares: Bitboard,
     pub states: Vec<BoardState>,
     pub material_balance: i32,
-    pub position_balance: i32,
+    pub midgame_position_balance: i32,
+    pub endgame_position_balance: i32,
     pub transposition_table: TranspositionTable,
     pub zobrist_hash: u64,
 }
@@ -203,7 +204,8 @@ impl Board {
         for square in 0..64 {
             if let Some(piece) = self.squares[square] {
                 self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
-                self.position_balance += position_value(piece.piece_type(), square, piece.side()) * piece.side().factor()
+                self.midgame_position_balance += midgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+                self.endgame_position_balance += endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
             }
         }
         self.zobrist_hash = get_zobrist_hash(self);
@@ -423,7 +425,8 @@ impl Board {
         self.side_squares[piece.side()].set_bit(square); // Update kingside castling right
         self.piece_squares[piece].set_bit(square);
         self.squares[square] = Some(piece);
-        self.position_balance += position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.midgame_position_balance += midgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.endgame_position_balance += endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
@@ -435,7 +438,8 @@ impl Board {
         self.side_squares[piece.side()].clear_bit(square);
         self.piece_squares[piece].clear_bit(square);
         self.squares[square] = None;
-        self.position_balance -= position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.midgame_position_balance += midgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.endgame_position_balance -= endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
@@ -495,7 +499,8 @@ impl Default for Board {
             absolute_pinned_squares: Bitboard(0),
             states: vec![BoardState::default()],
             material_balance: 0,
-            position_balance: 0,
+            midgame_position_balance: 0,
+            endgame_position_balance: 0,
             transposition_table: TranspositionTable::default(),
             zobrist_hash: 0,
         }
