@@ -6,10 +6,11 @@ const TOTAL_PHASE: i32 = 16 * PieceType::Pawn.phase() + 4 * PieceType::Knight.ph
 
 pub fn evaluate(board: &Board) -> i32 {
     let phase = phase(board);
+    //let phase = 0.5;
     let mut eval = (board.material_balance * board.side.factor()) as f32;
     eval += ((board.midgame_position_balance * board.side.factor()) as f32) * phase;
-    eval += ((board.midgame_position_balance * board.side.factor()) as f32) * (1.0 - phase);
-    eval += corner_king_evaluation(board) as f32 * phase * 10.0;
+    eval += ((board.endgame_position_balance * board.side.factor()) as f32) * (1.0 - phase);
+    eval += corner_king_evaluation(board) as f32 * (1.0 - phase) * 10.0;
     eval as i32
 }
 fn phase(board: &Board) -> f32 {

@@ -13,7 +13,8 @@ struct BookMove {
 static MOVES_BY_POSITION: Lazy<HashMap<String, Vec<BookMove>>> = Lazy::new(initialize_book_moves);
 
 pub fn get_book_move(board: &Board, times_played_weight: f32) -> Option<Move> {
-    let fen = board.fen().split_whitespace().take(4).collect::<Vec<&str>>().join(" ");
+    let fen = board.fen().split_whitespace().take(3).collect::<Vec<&str>>().join(" ");
+    println!("fen");
     if let Some(moves) = MOVES_BY_POSITION.get(&fen) {
         let weighted_play_count = |play_count: u32| f32::powf(play_count as f32, times_played_weight) as u32;
         let mut weights: Vec<u32> = Vec::new();

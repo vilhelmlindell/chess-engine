@@ -21,28 +21,30 @@ pub struct SearchState {
 #[derive(Default, Clone, Copy)]
 pub struct SearchResult {
     pub best_move: Option<Move>,
+    pub highest_eval: i32,
     pub depth_reached: u32,
     pub nodes: u32,
     pub transpositions: u32,
-    pub evaluation: i32,
     pub time: f32,
 }
+
+const MAX_EVAL: i32 = 100000000;
 
 pub fn search(max_time: f32, board: &mut Board) -> SearchResult {
     board.transposition_table.clear();
 
     let mut search_state = SearchState::default();
 
-    if let Some(book_move) = get_book_move(board, 0.5) {
+    if let Some(book_move) = get_book_move(board, 1.0) {
         search_state.result.best_move = Some(book_move);
         return search_state.result;
     }
 
     let start = Instant::now();
 
-    for depth in 1..=MAX_DEPTH as u32 {
-        let mut highest_eval = i32::MIN;
+    search_state.result.highest_eval = -MAX_EVAL;
 
+    for depth in 1..=MAX_DEPTH as u32 {
         let mut moves = generate_moves(board);
         order_moves(board, &mut moves, 0, &search_state.ordering_params);
 
@@ -51,17 +53,18 @@ pub fn search(max_time: f32, board: &mut Board) -> SearchResult {
             if time_searched > max_time {
                 search_state.result.depth_reached = (depth as i32 - 1) as u32;
                 search_state.result.time = time_searched;
-                search_state.result.evaluation = highest_eval;
                 return search_state.result;
             }
 
             board.make_move(mov);
-            let eval = -negamax(board, depth - 1, i32::MIN + 1, i32::MAX, 0, &mut search_state);
-            //println!("Move: {}, Eval: {}", mov, eval);
+            let eval = -negamax(board, depth - 1, -MAX_EVAL, MAX_EVAL, 0, &mut search_state);
             board.unmake_move(mov);
 
-            if eval > highest_eval {
-                highest_eval = eval;
+            //println!("Move: {}, Eval: {}", mov, eval);
+            //println!("Highest eval: {}", highest_eval);
+            //println!("Best move: {}", search_state.result.best_move.unwrap);
+            if eval > search_state.result.highest_eval {
+                search_state.result.highest_eval = eval;
                 search_state.result.best_move = Some(mov);
             }
         }
@@ -105,11 +108,7 @@ pub fn negamax(board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u3
     // Terminal node
     if moves.is_empty() {
         let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
-        let mut eval = 0;
-        if board.attacked(king_square) {
-            eval = i32::MIN + ply as i32;
-        }
-        return eval;
+        return if board.attacked(king_square) { -MAX_EVAL + ply as i32 } else { 0 };
     }
 
     let mut best_move: Option<Move> = None;
@@ -157,7 +156,7 @@ fn quiescence_search(board: &mut Board, mut alpha: i32, beta: i32, ply: u32, sta
 
     if moves.is_empty() {
         let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
-        return if board.attacked(king_square) { i32::MIN + ply as i32 } else { 0 };
+        return if board.attacked(king_square) { -MAX_EVAL + ply as i32 } else { 0 };
     }
     //order_moves(board, &mut moves, ply, &state.ordering_params);
     let mut num_captures = 0;

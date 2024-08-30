@@ -438,7 +438,7 @@ impl Board {
         self.side_squares[piece.side()].clear_bit(square);
         self.piece_squares[piece].clear_bit(square);
         self.squares[square] = None;
-        self.midgame_position_balance += midgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+        self.midgame_position_balance -= midgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.endgame_position_balance -= endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];

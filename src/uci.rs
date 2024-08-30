@@ -135,7 +135,7 @@ impl Uci {
         println!(
             "info depth {} score cp {} time {} nodes {} nps {}",
             result.depth_reached,
-            result.evaluation,
+            result.highest_eval,
             (result.time * 1000.0) as u32,
             result.nodes,
             result.nodes
