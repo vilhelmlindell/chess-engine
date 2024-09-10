@@ -1,0 +1,2 @@
+#cutechess-cli -engine name=Bot1 cmd=./target/release/chess_engine -engine name=Bot2 cmd=./target/release/chess_engine -each proto=uci tc=60+0.1 -games 10 -rounds 1 -concurrency 2 -pgnout match.pgn -openings file=openings.pgn format=pgn order=random
+cutechess-cli -engine name=Bot1 cmd=./target/release/chess_engine -engine name=Bot2 cmd=./target/release/chess_engine -each proto=uci tc=60+0.1 -games 10 -rounds 1

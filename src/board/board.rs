@@ -176,6 +176,7 @@ impl Board {
                 }
             }
         }
+
         // Set side to move
         match *fields.get(1).unwrap() {
             "w" => self.side = Side::White,

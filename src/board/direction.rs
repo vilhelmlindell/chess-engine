@@ -4,14 +4,14 @@ use crate::board::Side;
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 
 pub enum Direction {
-    North = 0,
-    South,
-    West,
-    East,
-    NorthWest,
-    NorthEast,
-    SouthWest,
-    SouthEast,
+    North = -8,
+    South = 8,
+    West = -1,
+    East = 1,
+    NorthWest = -9,
+    NorthEast = -7,
+    SouthWest = 7,
+    SouthEast = 9,
 }
 
 impl Direction {

@@ -4,6 +4,7 @@ use crate::board::Side;
 use crate::move_generation::magic_numbers::*;
 use once_cell::sync::Lazy;
 use std::cmp::min;
+use std::fmt::Debug;
 use std::num::Wrapping;
 
 pub static SQUARES_TO_EDGE: Lazy<[[u32; 8]; 64]> = Lazy::new(precompute_squares_to_edge);

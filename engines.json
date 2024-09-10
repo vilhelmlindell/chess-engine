@@ -1,0 +1,16 @@
+[
+  {
+    "command": "./target/release/chess_engine",
+    "name": "vilhelm",
+    "options": [],
+    "protocol": "uci",
+    "workingDirectory": "/home/vilhelm/dev/rust/chess-engine/"
+  },
+  {
+    "command": "stockfish",
+    "name": "stockfish",
+    "options": [],
+    "protocol": "uci",
+    "workingDirectory": "/home/vilhelm/dev/rust/chess-engine/"
+  }
+]
