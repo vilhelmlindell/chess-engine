@@ -69,7 +69,6 @@ pub fn search(max_time: f32, board: &mut Board) -> SearchResult {
             }
         }
     }
-    //search_state.result.depth_reached = (MAX_DEPTH - 1) as u32;
     search_state.result
 }
 
