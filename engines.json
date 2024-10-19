@@ -1,7 +1,14 @@
 [
   {
-    "command": "./target/release/chess_engine",
-    "name": "vilhelm",
+    "command": "./engines/uci-negamax",
+    "name": "uci-negamax",
+    "options": [],
+    "protocol": "uci",
+    "workingDirectory": "/home/vilhelm/dev/rust/chess-engine/"
+  },
+  {
+    "command": "./engines/uci-pvs",
+    "name": "uci-pvs",
     "options": [],
     "protocol": "uci",
     "workingDirectory": "/home/vilhelm/dev/rust/chess-engine/"
