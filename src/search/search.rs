@@ -90,7 +90,7 @@ impl Search {
             let alpha = -MAX_EVAL;
             let beta = MAX_EVAL;
 
-            let eval = self.negamax(board, depth, alpha, beta, 0);
+            let eval = self.pvs(board, depth, alpha, beta, 0);
 
             if self.start_time.elapsed().as_secs_f32() > self.max_time {
                 break;
@@ -106,14 +106,16 @@ impl Search {
         self.result.time = self.start_time.elapsed().as_millis();
         self.result.clone()
     }
-    
-    fn negamax(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
+
+    fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
         self.result.nodes += 1;
 
+        // Time management check
         if self.start_time.elapsed().as_secs_f32() > self.max_time {
             return alpha;
         }
 
+        // Transposition table lookup
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
             if entry.hash == board.zobrist_hash && entry.depth >= depth {
                 self.result.transpositions += 1;
@@ -133,7 +135,7 @@ impl Search {
             }
         }
 
-        // Depth limit reached
+        // Leaf node evaluation
         if depth == 0 {
             return self.quiescence_search(board, alpha, beta, ply + 1);
         }
@@ -141,7 +143,7 @@ impl Search {
         let mut moves = generate_moves(board);
         self.order_moves(board, &mut moves, ply);
 
-        // Terminal node
+        // Check for terminal positions
         if moves.is_empty() {
             let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
             return if board.attacked(king_square) {
@@ -154,14 +156,45 @@ impl Search {
         let mut best_move: Option<Move> = None;
         let mut evaluation_bound = NodeType::UpperBound;
 
-        for mov in moves {
+        // Search the first move with full window
+        let first_move = moves[0];
+        board.make_move(first_move);
+        let score = -self.pvs(board, depth - 1, -beta, -alpha, ply + 1);
+        board.unmake_move(first_move);
+
+        if score > alpha {
+            if score >= beta {
+                let entry = TranspositionEntry::new(depth, beta, first_move, NodeType::LowerBound, board.zobrist_hash);
+                board.transposition_table.store(entry);
+                if !board.is_capture(first_move) {
+                    self.update_killer_moves(first_move, ply);
+                }
+                return beta;
+            }
+            evaluation_bound = NodeType::Exact;
+            best_move = Some(first_move);
+            alpha = score;
+        }
+
+        // Search remaining moves with zero window
+        for mov in moves.into_iter().skip(1) {
+            if alpha >= beta {
+                break;
+            }
+
             board.make_move(mov);
-            let eval = -self.negamax(board, depth - 1, -beta, -alpha, ply + 1);
+
+            // Try null-window search first
+            let mut score = -self.pvs(board, depth - 1, -alpha - 1, -alpha, ply + 1);
+
+            // If the null-window search failed high, do a full re-search
+            if score > alpha && score < beta {
+                score = -self.pvs(board, depth - 1, -beta, -alpha, ply + 1);
+            }
+
             board.unmake_move(mov);
 
-            // Move was *too* good, opponent will choose a different move earlier on to avoid this position.
-            // (Beta-cutoff / Fail high)
-            if eval >= beta {
+            if score >= beta {
                 let entry = TranspositionEntry::new(depth, beta, mov, NodeType::LowerBound, board.zobrist_hash);
                 board.transposition_table.store(entry);
                 if !board.is_capture(mov) {
@@ -169,18 +202,20 @@ impl Search {
                 }
                 return beta;
             }
-            // Found a new best move in this position
-            if eval > alpha {
-                alpha = eval;
+
+            if score > alpha {
                 evaluation_bound = NodeType::Exact;
                 best_move = Some(mov);
+                alpha = score;
             }
         }
 
+        // Store position in transposition table
         if let Some(mov) = best_move {
             let entry = TranspositionEntry::new(depth, alpha, mov, evaluation_bound, board.zobrist_hash);
             board.transposition_table.store(entry);
         }
+
         alpha
     }
 
