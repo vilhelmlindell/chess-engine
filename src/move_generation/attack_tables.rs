@@ -4,7 +4,6 @@ use crate::board::Side;
 use crate::move_generation::magic_numbers::*;
 use once_cell::sync::Lazy;
 use std::cmp::min;
-use std::fmt::Debug;
 use std::num::Wrapping;
 
 pub static SQUARES_TO_EDGE: Lazy<[[u32; 8]; 64]> = Lazy::new(precompute_squares_to_edge);
@@ -147,7 +146,7 @@ fn precompute_rook_attack_mask() -> [Bitboard; 64] {
     let mut attack_masks = [Bitboard(0); 64];
     for square in 0..64 {
         let mut attack_mask = Bitboard(0);
-        for direction in Direction::orthagonal() {
+        for direction in Direction::orthogonal() {
             for squares_to_edge in 1..SQUARES_TO_EDGE[square][direction] {
                 let end_square = square as i32 + direction.value() * squares_to_edge as i32;
                 attack_mask.set_bit(end_square as usize);

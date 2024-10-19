@@ -79,6 +79,7 @@ fn generate_pawn_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
             board,
         );
     }
+
     if double_pushed_pawns != 0 {
         add_moves_from_bitboard(
             &|to| Move::new((to as i32 - Direction::up(board.side).value() * 2) as usize, to, MoveType::DoublePush),
@@ -105,8 +106,22 @@ fn generate_pawn_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
 
     add_moves_from_bitboard(&|to| Move::new((to as i32 - up_right.value()) as usize, to, MoveType::Normal), moves, capturing_pawns_up_right, board);
 
-    for promotion_type in MoveType::PROMOTIONS {
-        add_moves_from_bitboard(&|to| Move::new((to as i32 - up_right.value()) as usize, to, promotion_type), moves, promoted_pawns, board);
+    if promoted_pawns != 0 {
+        for promotion_type in MoveType::PROMOTIONS {
+            add_moves_from_bitboard(&|to| Move::new((to as i32 - up_right.value()) as usize, to, promotion_type), moves, promoted_pawns, board);
+        }
+    }
+
+    let mut capturing_pawns_up_left = bitboard.shift(up_left) & board.enemy_squares();
+    promoted_pawns = capturing_pawns_up_left & (RANK_1 | RANK_8);
+    capturing_pawns_up_left ^= promoted_pawns;
+
+    add_moves_from_bitboard(&|to| Move::new((to as i32 - up_left.value()) as usize, to, MoveType::Normal), moves, capturing_pawns_up_left, board);
+
+    if promoted_pawns != 0 {
+        for promotion_type in MoveType::PROMOTIONS {
+            add_moves_from_bitboard(&|to| Move::new((to as i32 - up_left.value()) as usize, to, promotion_type), moves, promoted_pawns, board);
+        }
     }
 
     generate_en_passant_moves(moves, board);

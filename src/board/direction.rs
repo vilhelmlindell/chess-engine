@@ -1,73 +1,52 @@
-use std::ops::{Index, IndexMut};
+use std::{ops::{Index, IndexMut}, slice::SliceIndex};
+use num_enum::{TryFromPrimitive, UnsafeFromPrimitive};
 
 use crate::board::Side;
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-
+#[derive(Clone, Copy, PartialEq, Eq, Hash, UnsafeFromPrimitive)]
+#[repr(u8)]
 pub enum Direction {
-    North = -8,
-    South = 8,
-    West = -1,
-    East = 1,
-    NorthWest = -9,
-    NorthEast = -7,
-    SouthWest = 7,
-    SouthEast = 9,
+    North,
+    West,
+    NorthWest,
+    NorthEast,
+    SouthWest,
+    SouthEast,
+    East,
+    South,
 }
 
+const DIRECTION_VALUES: [i32; 8] = [-8, -1, -9, -7, 7, 9, 1, 8];
+
 impl Direction {
-    pub const fn value(&self) -> i32 {
-        match *self {
-            Direction::North => -8,
-            Direction::South => 8,
-            Direction::West => -1,
-            Direction::East => 1,
-            Direction::NorthWest => -9,
-            Direction::NorthEast => -7,
-            Direction::SouthWest => 7,
-            Direction::SouthEast => 9,
-        }
+    pub const fn value(self) -> i32 {
+        DIRECTION_VALUES[self as usize]
     }
     pub const fn all() -> [Direction; 8] {
         [
-            Direction::West,
-            Direction::East,
             Direction::North,
-            Direction::South,
+            Direction::West,
             Direction::NorthWest,
             Direction::NorthEast,
             Direction::SouthWest,
             Direction::SouthEast,
+            Direction::East,
+            Direction::South,
         ]
     }
-    pub const fn orthagonal() -> [Direction; 4] {
+    pub const fn orthogonal() -> [Direction; 4] {
         [Direction::West, Direction::East, Direction::North, Direction::South]
     }
     pub const fn diagonal() -> [Direction; 4] {
         [Direction::NorthWest, Direction::NorthEast, Direction::SouthWest, Direction::SouthEast]
     }
-    pub fn opposite(&self) -> Direction {
-        match *self {
-            Direction::North => Direction::South,
-            Direction::South => Direction::North,
-            Direction::West => Direction::East,
-            Direction::East => Direction::West,
-            Direction::NorthWest => Direction::SouthEast,
-            Direction::NorthEast => Direction::SouthWest,
-            Direction::SouthWest => Direction::NorthEast,
-            Direction::SouthEast => Direction::NorthWest,
-        }
+    pub fn opposite(self) -> Direction {
+        unsafe { UnsafeFromPrimitive::unchecked_transmute_from(7 - self as u8) }
     }
     pub fn up(side: Side) -> Direction {
-        match side {
-            Side::White => Direction::North,
-            Side::Black => Direction::South,
-        }
+        unsafe { UnsafeFromPrimitive::unchecked_transmute_from(7 * side as u8) }
     }
     pub fn down(side: Side) -> Direction {
-        match side {
-            Side::White => Direction::South,
-            Side::Black => Direction::North,
-        }
+        unsafe { UnsafeFromPrimitive::unchecked_transmute_from(7 * (1 - side as u8)) }
     }
     pub fn from_squares(square1: usize, square2: usize) -> Direction {
         let change = square1 as i32 - square2 as i32;

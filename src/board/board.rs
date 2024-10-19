@@ -3,16 +3,11 @@ use super::direction::Direction;
 use super::piece::{Piece, PieceType};
 use super::piece_move::{Move, MoveType};
 use super::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
-use crate::evaluation;
 use crate::evaluation::piece_square_tables::{endgame_position_value, midgame_position_value};
 use crate::move_generation::attack_tables::*;
-use crate::move_generation::MAX_LEGAL_MOVES;
-use crate::search::search::{self, SearchResult};
 use crate::search::transposition_table::*;
-use arrayvec::ArrayVec;
 use num_enum::UnsafeFromPrimitive;
-use std::collections::HashMap;
-use std::fmt::Display;
+use std::collections::HashMap; use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -211,7 +206,6 @@ impl Board {
         }
         self.zobrist_hash = get_zobrist_hash(self);
     }
-    #[inline(always)]
     pub fn make_move(&mut self, mov: Move) {
         let mut state = BoardState::from_state(self.state());
 
@@ -281,7 +275,6 @@ impl Board {
         self.absolute_pinned_squares = self.absolute_pins();
         self.states.push(state);
     }
-    #[inline(always)]
     pub fn unmake_move(&mut self, mov: Move) {
         self.side = self.side.enemy();
         self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;

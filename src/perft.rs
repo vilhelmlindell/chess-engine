@@ -78,11 +78,14 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
 }
 
 fn search(depth: u32, prev_mov: Move, board: &mut Board) -> PerftResult {
-    if depth == 0 {
-        return get_move_info(prev_mov, board, false);
-    }
-    let mut result = PerftResult::default();
     let moves = generate_moves(board);
+
+    if depth == 1 {
+        return PerftResult { nodes: moves.len() as u64, ..Default::default() };
+    }
+
+    let mut result = PerftResult::default();
+
     for mov in moves {
         board.make_move(mov);
         result = result + search(depth - 1, mov, board);

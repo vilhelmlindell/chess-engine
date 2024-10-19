@@ -1,10 +1,14 @@
 use std::io;
 use std::time::Instant;
 
-use crate::board::Board;
-use crate::move_generation::generate_moves;
-use crate::perft::perft;
-use crate::search::search;
+use chess_engine::board::Board;
+use chess_engine::move_generation::generate_moves;
+use chess_engine::perft::perft;
+use chess_engine::search::{search, Search};
+
+fn main() {
+    Uci::start();
+}
 
 pub struct Uci {
     name: String,
@@ -12,6 +16,7 @@ pub struct Uci {
     board: Board,
     is_debug: bool,
     is_running: bool,
+    search: Search
 }
 
 impl Uci {
@@ -22,6 +27,7 @@ impl Uci {
             board: Board::start_pos(),
             is_debug: false,
             is_running: true,
+            search: Search::new(0.05),
         };
         while uci.is_running {
             uci.process_input();
@@ -130,21 +136,21 @@ impl Uci {
                 _ => {}
             }
         }
-        let result = search(1.0, &mut self.board);
-        println!("bestmove {}", result.best_move.unwrap());
-        println!(
-            "info depth {} score cp {} time {} nodes {} nps {}",
+        let result = self.search.search(&mut self.board);
+        print!(
+            "info depth {} score cp {} time {} nodes {} nps {} ",
             result.depth_reached,
             result.highest_eval,
-            (result.time * 1000.0) as u32,
+            result.time,
             result.nodes,
             result.nodes
         );
-        //println!("Depth reached: {}", search_result.depth_reached);
-        //println!("Leaf nodes evaluated: {}", search_result.positions_evaluated);
-        //println!("Transpositions: {}", search_result.transpositions);
-        //println!("Material balance: {}", self.board.material_balance);
-        //println!("Position balance: {}", self.board.position_balance);
+        print!("pv");
+        for mov in &result.pv {
+            print!(" {}", mov);
+        }
+        println!();
+        println!("bestmove {}", result.pv.first().expect("No best move found, either due to terminal node or transposition table being overwritten"));
     }
     fn ponder(&self) {}
     fn quit(&mut self) {
