@@ -19,11 +19,19 @@ const KILLER_MOVE_SCORE: i32 = 2000;
 const MAX_EVAL: i32 = 100000000;
 
 pub struct Search {
+    pub args: SearchArgs,
     pub result: SearchResult,
     pub max_time: f32,
     pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
     pub pv: Vec<Move>,
     start_time: Instant,
+}
+
+
+#[derive(Default, Clone, Copy)]
+pub struct SearchArgs {
+    pub time_left: [u32; 2],
+    pub time_increment: [u32; 2],
 }
 
 #[derive(Default, Clone)]
@@ -37,55 +45,34 @@ pub struct SearchResult {
     pub time: u128,
 }
 
-impl Search {
-    pub fn new(max_time: f32) -> Self {
+impl Default for Search {
+    fn default() -> Self {
         Self {
+            args: SearchArgs::default(),
             result: SearchResult::default(),
             start_time: Instant::now(),
-            max_time,
+            max_time: 0.0,
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             pv: Vec::with_capacity(MAX_DEPTH),
         }
     }
+}
 
-    pub fn extract_pv(&mut self, board: &mut Board) {
+impl Search {
+    pub fn search(&mut self, search_args: SearchArgs, board: &mut Board) -> SearchResult {
+        self.args = search_args;
         self.pv.clear();
-        let mut current_hash = board.zobrist_hash;
-
-        while let Some(entry) = board.transposition_table.probe(current_hash) {
-            if entry.hash != current_hash || self.pv.len() >= MAX_DEPTH {
-                break;
-            }
-
-            let pv_move = entry.best_move;
-            self.pv.push(pv_move);
-
-            // Make the move on the board to get the next position
-            board.make_move(pv_move);
-            current_hash = board.zobrist_hash;
-        }
-
-        // Unmake all the moves to restore the original board state
-        for &mov in self.pv.iter().rev() {
-            board.unmake_move(mov);
-        }
-    }
-
-    pub fn search(&mut self, board: &mut Board) -> SearchResult {
-        board.transposition_table.clear();
-        self.pv.clear();
-        self.start_time = Instant::now();
-        self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
-
-        // Initialize search state
         self.result = SearchResult::default();
+        self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
+        self.start_time = Instant::now();
+
+        board.transposition_table.clear();
 
         if let Some(book_move) = get_book_move(board, 1.0) {
             self.result.pv.push(book_move);
             return self.result.clone();
         }
 
-        // Iterate over increasing depths
         for depth in 1..=MAX_DEPTH as u32 {
             let alpha = -MAX_EVAL;
             let beta = MAX_EVAL;
@@ -107,10 +94,12 @@ impl Search {
         self.result.clone()
     }
 
+    pub fn calculate_time(&mut self, board: &Board) {
+    }
+
     fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
         self.result.nodes += 1;
 
-        // Time management check
         if self.start_time.elapsed().as_secs_f32() > self.max_time {
             return alpha;
         }
@@ -255,6 +244,29 @@ impl Search {
             }
         }
         alpha
+    }
+
+    pub fn extract_pv(&mut self, board: &mut Board) {
+        self.pv.clear();
+        let mut current_hash = board.zobrist_hash;
+
+        while let Some(entry) = board.transposition_table.probe(current_hash) {
+            if entry.hash != current_hash || self.pv.len() >= MAX_DEPTH {
+                break;
+            }
+
+            let pv_move = entry.best_move;
+            self.pv.push(pv_move);
+
+            // Make the move on the board to get the next position
+            board.make_move(pv_move);
+            current_hash = board.zobrist_hash;
+        }
+
+        // Unmake all the moves to restore the original board state
+        for &mov in self.pv.iter().rev() {
+            board.unmake_move(mov);
+        }
     }
 
     pub fn order_moves(&self, board: &Board, moves: &mut [Move], ply: u32) {

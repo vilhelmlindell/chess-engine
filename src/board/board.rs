@@ -43,6 +43,7 @@ pub struct Board {
     pub endgame_position_balance: i32,
     pub transposition_table: TranspositionTable,
     pub zobrist_hash: u64,
+    pub opening_move_count: u32,
 }
 
 impl Board {
@@ -484,7 +485,7 @@ impl Board {
 impl Default for Board {
     fn default() -> Self {
         Self {
-            squares: [Option::<Piece>::None; 64],
+            squares: [None; 64],
             side: Side::White,
             occupied_squares: Bitboard(0),
             side_squares: [Bitboard(0); 2],
@@ -497,6 +498,7 @@ impl Default for Board {
             endgame_position_balance: 0,
             transposition_table: TranspositionTable::default(),
             zobrist_hash: 0,
+            opening_move_count: 0, 
         }
     }
 }

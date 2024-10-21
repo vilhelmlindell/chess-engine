@@ -80,6 +80,10 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
 fn search(depth: u32, prev_mov: Move, board: &mut Board) -> PerftResult {
     let moves = generate_moves(board);
 
+    //if depth == 0 {
+    //    return PerftResult { nodes: 1 , ..Default::default() };
+    //}
+
     if depth == 1 {
         return PerftResult { nodes: moves.len() as u64, ..Default::default() };
     }
@@ -168,7 +172,7 @@ mod tests {
     }
     #[test]
     fn test_perft3() {
-        let fen = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - ";
+        let fen = "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1";
         assert_eq!(perft(fen, 1).nodes, 14);
         assert_eq!(perft(fen, 2).nodes, 191);
         assert_eq!(perft(fen, 3).nodes, 2812);

@@ -1,10 +1,10 @@
 use std::io;
 use std::time::Instant;
 
-use chess_engine::board::Board;
+use chess_engine::board::{Board, Side};
 use chess_engine::move_generation::generate_moves;
 use chess_engine::perft::perft;
-use chess_engine::search::{search, Search};
+use chess_engine::search::{Search, SearchArgs};
 
 fn main() {
     Uci::start();
@@ -16,7 +16,7 @@ pub struct Uci {
     board: Board,
     is_debug: bool,
     is_running: bool,
-    search: Search
+    search: Search,
 }
 
 impl Uci {
@@ -27,7 +27,7 @@ impl Uci {
             board: Board::start_pos(),
             is_debug: false,
             is_running: true,
-            search: Search::new(0.05),
+            search: Search::default(),
         };
         while uci.is_running {
             uci.process_input();
@@ -39,6 +39,7 @@ impl Uci {
         self.parse_command(command);
     }
     fn parse_command(&mut self, full_command: String) {
+        println!("{}", full_command);
         let command = full_command.split_whitespace().collect::<Vec<&str>>()[0];
         match command {
             "uci" => self.identify(),
@@ -112,8 +113,9 @@ impl Uci {
         self.board = board;
     }
     fn go(&mut self, command: String) {
-        let mut words = command.split_whitespace();
+        let mut words = command.split_whitespace().peekable();
         words.next();
+        let mut search_args = SearchArgs::default();
         while let Some(token) = words.next() {
             match token {
                 "perft" => {
@@ -124,6 +126,22 @@ impl Uci {
                     println!("Time elapsed: {}", seconds);
                     println!("Nps: {}", result.nodes as f32 / seconds);
                     return;
+                }
+                "wtime" => {
+                    let time_left = words.peek().expect("No time given for wtime, incorrect uci command").parse::<u32>().expect("Time was not given as a number");
+                    search_args.time_left[Side::White] = time_left;
+                }
+                "btime" => {
+                    let time_left = words.peek().expect("No time given for btime, incorrect uci command").parse::<u32>().expect("Time was not given as a number");
+                    search_args.time_left[Side::Black] = time_left;
+                }
+                "winc" => {
+                    let time_increment = words.peek().expect("No time given for winc, incorrect uci command").parse::<u32>().expect("Time was not given as a number");
+                    search_args.time_increment[Side::White] = time_increment;
+                }
+                "binc" => {
+                    let time_increment = words.peek().expect("No time given for binc, incorrect uci command").parse::<u32>().expect("Time was not given as a number");
+                    search_args.time_increment[Side::Black] = time_increment;
                 }
                 //"infinite" => search_option.infinite = true,
                 //"depth" => {
@@ -136,21 +154,20 @@ impl Uci {
                 _ => {}
             }
         }
-        let result = self.search.search(&mut self.board);
+        let result = self.search.search(search_args, &mut self.board);
         print!(
             "info depth {} score cp {} time {} nodes {} nps {} ",
-            result.depth_reached,
-            result.highest_eval,
-            result.time,
-            result.nodes,
-            result.nodes
+            result.depth_reached, result.highest_eval, result.time, result.nodes, result.nodes
         );
         print!("pv");
         for mov in &result.pv {
             print!(" {}", mov);
         }
         println!();
-        println!("bestmove {}", result.pv.first().expect("No best move found, either due to terminal node or transposition table being overwritten"));
+        println!(
+            "bestmove {}",
+            result.pv.first().expect("No best move found, either due to terminal node or transposition table being overwritten")
+        );
     }
     fn ponder(&self) {}
     fn quit(&mut self) {
