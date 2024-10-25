@@ -21,7 +21,7 @@ const MAX_EVAL: i32 = 100000000;
 pub struct Search {
     pub args: SearchArgs,
     pub result: SearchResult,
-    pub max_time: f32,
+    pub max_time: u32,
     pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
     pub pv: Vec<Move>,
     start_time: Instant,
@@ -42,7 +42,7 @@ pub struct SearchResult {
     pub depth_reached: u32,
     pub nodes: u32,
     pub transpositions: u32,
-    pub time: u128,
+    pub time: u32,
 }
 
 impl Default for Search {
@@ -51,7 +51,7 @@ impl Default for Search {
             args: SearchArgs::default(),
             result: SearchResult::default(),
             start_time: Instant::now(),
-            max_time: 0.0,
+            max_time: 0,
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             pv: Vec::with_capacity(MAX_DEPTH),
         }
@@ -65,6 +65,8 @@ impl Search {
         self.result = SearchResult::default();
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
+        self.max_time = self.calculate_time(board);
+        println!("{}", self.max_time);
 
         board.transposition_table.clear();
 
@@ -74,12 +76,13 @@ impl Search {
         }
 
         for depth in 1..=MAX_DEPTH as u32 {
+            println!("Depth {}", depth);
             let alpha = -MAX_EVAL;
             let beta = MAX_EVAL;
 
             let eval = self.pvs(board, depth, alpha, beta, 0);
 
-            if self.start_time.elapsed().as_secs_f32() > self.max_time {
+            if self.start_time.elapsed().as_millis() as u32 > self.max_time {
                 break;
             }
 
@@ -90,19 +93,37 @@ impl Search {
         }
 
         self.result.pv = self.pv.clone();
-        self.result.time = self.start_time.elapsed().as_millis();
+        self.result.time = self.start_time.elapsed().as_millis() as u32;
         self.result.clone()
     }
 
-    pub fn calculate_time(&mut self, board: &Board) {
+    fn calculate_time(&mut self, board: &Board) -> u32 {
+        let half_moves_left = Search::remaining_half_moves(board.total_material);
+        let time_left = self.args.time_left[board.side] + self.args.time_increment[board.side] * half_moves_left / 2;
+        time_left / half_moves_left
+    }
+    // Approximation for amount of half moves remaining
+    // See: http://facta.junis.ni.ac.rs/acar/acar200901/acar2009-07.pdf for more info
+    fn remaining_half_moves(material: u32) -> u32 {
+        match material {
+            0..20 => {
+                material + 10
+            },
+            20..=60 => {
+                3 * material / 8 + 22
+            },
+            61.. => {
+                5 * material / 4 - 30
+            }
+        }
     }
 
     fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
-        self.result.nodes += 1;
-
-        if self.start_time.elapsed().as_secs_f32() > self.max_time {
+        if self.start_time.elapsed().as_millis() as u32 > self.max_time {
             return alpha;
         }
+
+        self.result.nodes += 1;
 
         // Transposition table lookup
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
@@ -145,7 +166,6 @@ impl Search {
         let mut best_move: Option<Move> = None;
         let mut evaluation_bound = NodeType::UpperBound;
 
-        // Search the first move with full window
         let first_move = moves[0];
         board.make_move(first_move);
         let score = -self.pvs(board, depth - 1, -beta, -alpha, ply + 1);
@@ -209,6 +229,10 @@ impl Search {
     }
 
     fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
+        if self.start_time.elapsed().as_millis() as u32 > self.max_time {
+            return alpha;
+        }
+
         self.result.nodes += 1;
 
         let stand_pat = evaluate(board);

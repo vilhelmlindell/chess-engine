@@ -73,6 +73,16 @@ impl PieceType {
             PieceType::King => 20000,
         }
     }
+    pub fn standard_value(&self) -> u32 {
+        match self {
+            PieceType::Pawn => 1,
+            PieceType::Knight => 3,
+            PieceType::Bishop => 3,
+            PieceType::Rook => 5,
+            PieceType::Queen => 9,
+            PieceType::King => 0,
+        }
+    }
     pub const fn phase(&self) -> i32 {
         match self {
             PieceType::Pawn => 1,

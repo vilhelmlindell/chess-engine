@@ -1,5 +1,5 @@
 use crate::board::{Board, Side};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use rand::*;
 
 const NUM_SQUARES: usize = 64;
@@ -7,10 +7,10 @@ const NUM_PIECES: usize = 12;
 const NUM_CASTLING_RIGHTS: usize = 16;
 const NUM_EN_PASSANT_SQUARES: usize = 8;
 
-pub static ZOBRIST_SQUARES: Lazy<[[u64; NUM_PIECES]; NUM_SQUARES]> = Lazy::new(initialize_zobrist_squares);
-pub static ZOBRIST_SIDE_TO_MOVE: Lazy<u64> = Lazy::new(initialize_zobrist_side_to_move);
-pub static ZOBRIST_CASTLING_RIGHTS: Lazy<[u64; NUM_CASTLING_RIGHTS]> = Lazy::new(initialize_zobrist_castling_rights);
-pub static ZOBRIST_EN_PASSANT_SQUARE: Lazy<[u64; NUM_EN_PASSANT_SQUARES]> = Lazy::new(initialize_zobrist_en_passant_square);
+pub static ZOBRIST_SQUARES: LazyLock<[[u64; NUM_PIECES]; NUM_SQUARES]> = LazyLock::new(initialize_zobrist_squares);
+pub static ZOBRIST_SIDE_TO_MOVE: LazyLock<u64> = LazyLock::new(initialize_zobrist_side_to_move);
+pub static ZOBRIST_CASTLING_RIGHTS: LazyLock<[u64; NUM_CASTLING_RIGHTS]> = LazyLock::new(initialize_zobrist_castling_rights);
+pub static ZOBRIST_EN_PASSANT_SQUARE: LazyLock<[u64; NUM_EN_PASSANT_SQUARES]> = LazyLock::new(initialize_zobrist_en_passant_square);
 
 pub fn get_zobrist_hash(board: &Board) -> u64 {
     let mut zobrist_hash = 0;

@@ -7,7 +7,8 @@ use crate::evaluation::piece_square_tables::{endgame_position_value, midgame_pos
 use crate::move_generation::attack_tables::*;
 use crate::search::transposition_table::*;
 use num_enum::UnsafeFromPrimitive;
-use std::collections::HashMap; use std::fmt::Display;
+use std::collections::HashMap;
+use std::fmt::Display;
 use std::ops::{Index, IndexMut};
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -39,6 +40,7 @@ pub struct Board {
     pub absolute_pinned_squares: Bitboard,
     pub states: Vec<BoardState>,
     pub material_balance: i32,
+    pub total_material: u32,
     pub midgame_position_balance: i32,
     pub endgame_position_balance: i32,
     pub transposition_table: TranspositionTable,
@@ -203,6 +205,7 @@ impl Board {
                 self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
                 self.midgame_position_balance += midgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
                 self.endgame_position_balance += endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
+                self.total_material += piece.piece_type().standard_value();
             }
         }
         self.zobrist_hash = get_zobrist_hash(self);
@@ -423,6 +426,7 @@ impl Board {
         self.midgame_position_balance += midgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.endgame_position_balance += endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
+        self.total_material += piece.piece_type().standard_value();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
 
@@ -436,6 +440,7 @@ impl Board {
         self.midgame_position_balance -= midgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.endgame_position_balance -= endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
+        self.total_material -= piece.piece_type().standard_value();
         self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
     }
     #[inline(always)]
@@ -496,9 +501,10 @@ impl Default for Board {
             material_balance: 0,
             midgame_position_balance: 0,
             endgame_position_balance: 0,
+            total_material: 0,
             transposition_table: TranspositionTable::default(),
             zobrist_hash: 0,
-            opening_move_count: 0, 
+            opening_move_count: 0,
         }
     }
 }

@@ -1,16 +1,16 @@
 use crate::board::piece_move::Move;
 use crate::board::Board;
-use once_cell::sync::Lazy;
 use rand::Rng;
 use std::collections::HashMap;
 use std::fs::read_to_string;
+use std::sync::LazyLock;
 
 struct BookMove {
     move_string: String,
     times_played: u32,
 }
 
-static MOVES_BY_POSITION: Lazy<HashMap<String, Vec<BookMove>>> = Lazy::new(initialize_book_moves);
+static MOVES_BY_POSITION: LazyLock<HashMap<String, Vec<BookMove>>> = LazyLock::new(initialize_book_moves);
 
 pub fn get_book_move(board: &Board, times_played_weight: f32) -> Option<Move> {
     let fen = board.fen().split_whitespace().take(3).collect::<Vec<&str>>().join(" ");
