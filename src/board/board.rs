@@ -30,6 +30,7 @@ pub fn square_from_string(square: &str) -> usize {
     file * 8 + rank
 }
 
+#[derive(Clone)]
 pub struct Board {
     pub squares: [Option<Piece>; 64],
     pub side: Side,

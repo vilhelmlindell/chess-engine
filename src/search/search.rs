@@ -6,6 +6,7 @@ use crate::move_generation::generate_moves;
 use crate::search::transposition_table::{NodeType, TranspositionEntry};
 use std::cmp::Ordering;
 use std::time::Instant;
+use std::thread;
 
 use super::book_moves::get_book_move;
 
@@ -67,6 +68,15 @@ impl Search {
         self.start_time = Instant::now();
         self.max_time = self.calculate_time(board);
         println!("{}", self.max_time);
+
+        let vote_map = [0; 64 * 64];
+        let available_threads: usize = thread::available_parallelism().unwrap().into();
+        let mut threads = Vec::with_capacity(available_threads);
+
+        for i in 0..available_threads {
+            threads.push(thread::spawn(move || {
+            }));
+        }
 
         board.transposition_table.clear();
 
