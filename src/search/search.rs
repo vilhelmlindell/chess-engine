@@ -5,8 +5,8 @@ use crate::evaluation::evaluate;
 use crate::move_generation::generate_moves;
 use crate::search::transposition_table::{NodeType, TranspositionEntry};
 use std::cmp::Ordering;
-use std::time::Instant;
 use std::thread;
+use std::time::Instant;
 
 use super::book_moves::get_book_move;
 
@@ -27,7 +27,6 @@ pub struct Search {
     pub pv: Vec<Move>,
     start_time: Instant,
 }
-
 
 #[derive(Default, Clone, Copy)]
 pub struct SearchArgs {
@@ -71,11 +70,11 @@ impl Search {
 
         let vote_map = [0; 64 * 64];
         let available_threads: usize = thread::available_parallelism().unwrap().into();
+        available_threadsek
         let mut threads = Vec::with_capacity(available_threads);
 
         for i in 0..available_threads {
-            threads.push(thread::spawn(move || {
-            }));
+            threads.push(thread::spawn(move || {}));
         }
 
         board.transposition_table.clear();
@@ -116,15 +115,9 @@ impl Search {
     // See: http://facta.junis.ni.ac.rs/acar/acar200901/acar2009-07.pdf for more info
     fn remaining_half_moves(material: u32) -> u32 {
         match material {
-            0..20 => {
-                material + 10
-            },
-            20..=60 => {
-                3 * material / 8 + 22
-            },
-            61.. => {
-                5 * material / 4 - 30
-            }
+            0..20 => material + 10,
+            20..=60 => 3 * material / 8 + 22,
+            61.. => 5 * material / 4 - 30,
         }
     }
 

@@ -80,13 +80,13 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
 fn search(depth: u32, prev_mov: Move, board: &mut Board) -> PerftResult {
     let moves = generate_moves(board);
 
-    //if depth == 0 {
-    //    return PerftResult { nodes: 1 , ..Default::default() };
-    //}
-
-    if depth == 1 {
-        return PerftResult { nodes: moves.len() as u64, ..Default::default() };
+    if depth == 0 {
+        return PerftResult { nodes: 1 , ..Default::default() };
     }
+
+    //if depth == 1 {
+    //    return PerftResult { nodes: moves.len() as u64, ..Default::default() };
+    //}
 
     let mut result = PerftResult::default();
 

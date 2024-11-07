@@ -1,9 +1,10 @@
+use chess_engine::board::bitboard::Bitboard;
 use chess_engine::board::piece::Piece;
 use chess_engine::board::Board;
 use image::{imageops, DynamicImage, GenericImageView, RgbImage, Rgba, RgbaImage};
 use imageproc::drawing::{draw_text_mut, text_size, Canvas};
 use once_cell::sync::Lazy;
-use rusttype::{point, Font, Scale};
+use rusttype::{point};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -58,13 +59,6 @@ fn lerp_color(a: Rgba<u8>, b: Rgba<u8>, t: f32) -> Rgba<u8> {
 fn draw_board(board: &Board) -> RgbaImage {
     let mut board_image = BOARD_IMAGE.clone();
 
-    // Load the font for text
-    let font_data = include_bytes!("../../assets/OpenSans-Regular.ttf");
-    let font = Font::try_from_bytes(font_data as &[u8]).expect("Failed to load font");
-
-    // Define the scale for the text
-    let scale = Scale { x: 100.0, y: 100.0 };
-
     for (i, piece_option) in board.squares.iter().enumerate() {
         let rank = (i as u32) / 8;
         let file = (i as u32) % 8;
@@ -81,22 +75,42 @@ fn draw_board(board: &Board) -> RgbaImage {
             imageops::overlay(&mut board_image, &piece_image, x_center as i64, y_center as i64);
         }
     }
+    board_image
+}
 
+fn get_bitboard_array(bitboard: Bitboard) -> [u64; 64] {
+    let mut array = [0; 64];
+    for i in 0..64 {
+        if bitboard.bit(i) != 0 {
+            array[i] = 1;
+        }
+    }
+    array
+}
+
+fn draw_bitboard(image: &mut RgbaImage, bitboard: Bitboard) {
     // Add a black tint overlay
     // Add a black tint overlay using linear interpolation
     let tint = Rgba([0, 0, 0, 255]); // Black color for tint
-    for y in 0..board_image.height() {
-        for x in 0..board_image.width() {
-            let pixel = board_image.get_pixel(x, y);
-            let tinted_pixel = lerp_color(*pixel, tint, 0.5);
-            board_image.put_pixel(x, y, tinted_pixel);
+    for y in 0..image.height() {
+        for x in 0..image.width() {
+            let pixel = image.get_pixel(x, y);
+            let tinted_pixel = lerp_color(*pixel, tint, 0.3);
+            image.put_pixel(x, y, tinted_pixel);
         }
     }
 
-    for (i, _) in board.squares.iter().enumerate() {
+    // Load the font for text
+    let font_data = include_bytes!("../../assets/OpenSans-Regular.ttf");
+    let font = Font::try_from_bytes(font_data as &[u8]).expect("Failed to load font");
+
+    // Define the scale for the text
+    let scale = Scale { x: 100.0, y: 100.0 };
+
+    for (i, bit) in get_bitboard_array(bitboard).iter().enumerate() {
         let rank = (i as u32) / 8;
         let file = (i as u32) % 8;
-        let square_size = board_image.width() / 8;
+        let square_size = image.width() / 8;
 
         let x_center = file * square_size + square_size / 2;
         let y_center = rank * square_size + square_size / 2;
@@ -105,7 +119,7 @@ fn draw_board(board: &Board) -> RgbaImage {
         let index_text = format!("{}", i);
         let text_size = measure_text_size(&index_text, scale, &font);
         draw_text_mut(
-            &mut board_image,
+            image,
             Rgba([255, 255, 255, 255]),
             x_center as i32 - text_size.0 as i32 / 2,
             y_center as i32 - text_size.1 as i32 / 2,
@@ -114,7 +128,6 @@ fn draw_board(board: &Board) -> RgbaImage {
             &index_text,
         );
     }
-    board_image
 }
 
 fn main() {
