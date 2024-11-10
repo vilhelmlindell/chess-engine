@@ -70,7 +70,6 @@ impl Search {
 
         let vote_map = [0; 64 * 64];
         let available_threads: usize = thread::available_parallelism().unwrap().into();
-        available_threadsek
         let mut threads = Vec::with_capacity(available_threads);
 
         for i in 0..available_threads {
