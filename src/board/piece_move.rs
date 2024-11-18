@@ -33,7 +33,7 @@ impl MoveType {
     }
 }
 
-type Square = usize;
+pub type Square = usize;
 
 #[derive(Default, PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub struct Move {
