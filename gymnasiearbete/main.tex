@@ -61,7 +61,23 @@ pub enum Direction {
     South = 8,
 }
 
-Drag generingen är den delen av schackdatorn där användningen av bitboards blir som mest fördelaktig på grund av de operationer som effektiv kan manipulera bitboardsen. Schack har 6 olika pjäser som kan röra sig på olika sätt. Men för drag generingen är den generella principen samma, först använder vi lsb för att få positionen på brädet av en pjäs av en specifik typ. Detta låter oss slippa loopa igenom alla 64 bitar för att hitta pjäserna eftersom vi bara bryr oss om bitarna som är 1 och därmed har en pjäs. Därefter tar vi in en funktion som utifrån en startruta för en viss pjäs returnerar slutrutan för draget.
+Drag generingen är den delen av schackdatorn där användningen av bitboards blir som mest fördelaktig på grund av de operationer som effektiv kan manipulera bitboardsen. Schack har 6 olika pjäser som kan röra sig på olika sätt. Men för drag generingen är den generella principen samma, först använder vi lsb för att få positionen på brädet av en pjäs av en specifik typ. Detta låter oss loopa igenom alla 64 bitar för att hitta pjäserna eftersom vi bara bryr oss om bitarna som är 1 och därmed har en pjäs. 
+
+
+Därefter tar vi in en funktion som utifrån en startruta för en viss pjäs returnerar slutrutan för draget. 
+
+För att generera drag för hästen är tekniken att man vid kompileringstid genererar en array som indexeras med en ruta, ett tal mellan 0 och 64, och returnerar en Bitboard där endast de rutor som en häst som står på den rutan hade kunnat flytta sig till är 1. Detta låter oss förvarara detta värde på minnet istället för att omberäkna varje gång vi genererar drag. 
+
+Vi loopar därmed först igenom bitboarden för alla t ex vita hästar, för varje häst indexerar vi vår array och får ut alla rutor som hästen kan flytta sig till från sin nuvarande position. Vi loopar igenom dessa slut rutor och adderar ett drag till listan av varje drag. 
+
+En ytterliggare sak man måste ta hänsyn till är absoluta pins. En schackpjäs är i en absolut pin när den skyddar kungen från en attack från en glidande pjäs, och får endast flytas längs de rutorna som den glidande pjäsen anfaller. När vi genererar drag som inte är kungens drag, måste vi därmed kolla om pjäsen som vi genererar dragen för är absolut pinnad. Detta görs genom att vi håller koll på alla absolut pinnade pjäser i en bitboard, som uppdateras varje gång ett drag görs eller dras tillbaka. När vi sedan genererar drag för pjäser som inte är kungen, kollar vi först om pjäsen är pinnad, eller 
+
+#[inline(always)]
+fn legal(board: &Board, from: usize, to: usize) -> bool {
+    // a non king move is only legal if the piece isn't pinned or it's moving along the ray
+    // between the piece and the king
+    board.absolute_pinned_squares.bit(from) == 0 || Board::aligned(to, from, board.piece_squares[Piece::new(PieceType::King, board.side)].lsb())
+}
 
 
     for to in bitboard {
