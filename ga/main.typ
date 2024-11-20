@@ -1,3 +1,33 @@
+#align(center, text(17pt)[
+  *A fluid dynamic model
+  for glacier flow*
+])
+#grid(
+  columns: (1fr, 1fr),
+  align(center)[
+    Therese Tungsten \
+    Artos Institute \
+    #link("mailto:tung@artos.edu")
+  ]
+)
+#set page(
+  paper: "us-letter",
+  header: align(right)[
+    A fluid dynamic model for
+    glacier flow
+  ],
+  numbering: "1",
+)
+
+#set par(justify: true)
+#set text(
+  font: "Libertinus Serif",
+  size: 11pt,
+)
+
+#lorem(600)
+#set heading(numbering: "1.")
+
 = Introduction
 I detta gymnasiearbete är målet att undersöka hur man programmerar en shackdator som uttnytjar kända tekniker för att göra den mer effektiv. Schackdatorer har funnits ände sedan 1948 då Alan Turing skapade den första riktiga Schackdatorn. Sedan dess har vi utvecklat både mycket mer högpresterande datorer som kör schackdatorerna, samt mycket mer sofistikerade algoritmer och optimiseringar på mjukvarunivå som har härstammat från den enorma mängd.
 
@@ -23,9 +53,9 @@ En modern dator har en 64 bitars CPU, vilket innebär att den kan utföra operat
 På grund av detta kan vi uttnytja många av de instruktioner som CPUn kan utföra på 64 bitars tal för att manipulera bitboardsen och därmed också pjäserna. Två av de mest vanliga instruktionerna som används i mitt program är så kallad logisk skift https://en.wikipedia.org/wiki/Logical_shift
 som helt enkel förflyttar alla bitar i ett tal åt vänster eller höger beroende på vilket håll skiften sker åt, och därefter fyller lediga platserna i talet fylls därefter i med 0:or.
 
-\[a \ll n\] flyttar alla bitar ett steg åt vänster
-\[a \gg n\] flyttar alla bitar ett steg åt hoger
-\[!a n\] flippar alla bitar, varje 0:a blir 1 och varje 1:a blir 0.
+$ a << n $ flyttar alla bitar ett steg åt vänster
+$ a >> n $ flyttar alla bitar ett steg åt hoger
+$ !a $ flippar alla bitar, varje 0:a blir 1 och varje 1:a blir 0.
 
 Två andra viktiga operationer som inte alltid är explicit instruktioner eftersom det varierar från mellan olika instruktionssätt för CPUer, men i Rust är dessa funktioner:
 https://doc.rust-lang.org/std/primitive.u64.html#method.leading_zeros
@@ -95,9 +125,9 @@ den har en for loop som letar igenom alla 1:or i bitboarden för alla hästar so
 = Sokning
 Minimax är ett algoritm som används för att bestämma poängen efter ett visst mängd drag för ett noll-summa spel vilket är vad schack är. Minimax är beroende av en evalueringsfunktion som ger ett heurestiskt mått på hur väl det går för spelarna. I mitt schackprogram använder jag en variation av minimax som kallas för negamax, vilket simplifierar koden genom att uttnytja följande faktum
 
-min(a,b)=max(-b,-a)
+$ min(a,b)=max(-b,-a) $
 
-= Negamax
+== Negamax
 Detta fungerar således evalueringsfunktionen returnerar ett värde som är relativt till sidan som gör draget--då större värden är bättre--vilket innebär att i negamax försöker både sidorna maximera evaluerings värde. 
 
 Algoritmen fungerar genom att gå igenom ett träd av alla möjliga positioner till ett visst djup. Vi börjar vid brädets nuvarande positionen och genererar en lista av alla lagliga drag. För varje lagligt drag skapar vi en ny nod i trädet som representerar schackbrädets position efter att draget har gjorts. Vi får ett heurestiskt värde för en av dessa barnnoder genom att anropa negamax igen från barnnoden, vilket kommer att ge oss ett heurestiskt värde för hur bra positionen är för den nuvarande spelaren. 
@@ -118,13 +148,13 @@ fn nega_max(depth ) {
 }
 ```
 
-= Alpha-beta pruning
+== Alpha-beta pruning
 Alpha-beta pruning är en förbättring på minimax som drastiskt kan minska antalet noder som behöver sökas. Principen utgår ifrån att vi sparar ett alfa och ett beta värde när vi söker, där alfa är det minsta poängen som den maximerande spelaren är garanterad, och beta är det största värdet som den minimerande spelaren är garanterad. Alfa får ett ursprungligt värde på -oo och beta oo. Dessa två värden är de sämsta möjliga som spelarna kan få, och när vi söker igenom trädet kommer vi uppdatera dessa. Efter vi har evaluerat värdet i en nod kollar vi ifall . Principen utgår ifrån att det bästa värdet som den maximerande spelaren kan få , a, är det sämsta värdet som den minimerande spelaren kan få, och tvärtom för b.
 
-= Horisonteffekten
+== Horisonteffekten
 Ett problem som dyker upp med vårt nuvarande sökalgoritm är en effekt som kallas för horisonteffekten. Eftersom vi har ett förutbestämt djup som vi söker till förekommer det situationer då det i lövnoden görs ett drag som har ett positivt vä. Ett exempel är ifall att det i en av lövnoderna görs ett drag där vits drottning tar en svart bonde, som i detta fallet blir positivt för vit. Problemet är att eftersom sökningen stannar vid detta djup kollar vi inte ifall det fanns en pjäs som skyddade den bonden och som nästa drag kommer ta drottningen. Detta kan lösas genom att vi inte stannar vid en nod som är instabil, dvs det finns drag som leder till en betydlig förändring i evalueringen. Det lättaste sättet att göra detta är att vi efter vår sökningen till en specifierad djuper, söker rekursivt genom alla drag som tar en annan pjäs. Detta fungerar relativt väl eftersom de drag som vanligast ger drastiska förändringar i evalueringen. Det finns fall där drag som inte tar pjäser ger drastiska förändringar i evalueringar, men dessa ignorerar vi att söka genom i vår horisontsökning eftersom det är svårt att bestämma det utan att göra draget, vilket skulle göra sökdjupet oändligt långt.
 
-= Sortering av drag
+== Sortering av drag
 När vi söker igenom dragen spelar ordningen vi gör det i en stor roll. Detta beror på att alpha-beta pruningen kommer att bli mer effektiv om vi lyckas öka alfa och minska beta, dvs hitta bättre och bättre drag för de båda spelarna eftersom detta leder till fler alpha och beta cutoffs. Därmed är det viktigt att man sorterar dragen efter man har genererat dem. Det finns flera olika faktorer som kan uttnytjas för att få en effektiv sortering av drag. För att sortera dragen som i princip är en lista använder Rust något default sorteringsalgoritm där allting jag behöver skicka som argument är en funktion som tar in två drag och säger vilken som ska vara först i listan.
 
 När man uttnytjar iterative deepening i sin sökmetod är en av de mest effektiva faktorerna för sorteringen ifall förra sökningens bästa linje innehåller det drag som man försöker sortera och vid rätt djup. Drag som man vid en tidigare sökning redan bestämt är bra har en väldigt hög chans att även vara bra vid ett djup högre, vilket är varför man vill söka dessa drag först.
@@ -137,10 +167,10 @@ let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piec
 Därefter är det bra att kolla transposition table
 
 
-= Transposition Table
+== Transposition Table
 När vi söker med minimax kommer vi att stötta på samma position senare i sökträdet i två separata sökningar även om dessa sökningar börjar med olika drag. Detta beror på att samma schackposition kan nås om man bara ändrar ordningen som man göra vissa drag i. När vi söker med negamax är det därmed användbart att hålla koll på alla positioner som vi har befunnit oss i samt, spara det djup och den evaluering som gavs till positionen i tidigare sökningar. Om vi stöter på positionen igen kan vi bara återanvända evalueringen som är sparat i transpositio ntablet. I koden implementeras Transposition table med en hashtable vars hashfunktion uttnytjar den tidigarenämnda zobrist hashing. Det finns en risk att zobrist hashingen är fel eftersom det inte är en perfekt hash funktion och det finns en risk för kollisioner, men
 
-= Zobrist hashing
+== Zobrist hashing
 Zobrist hashing 'r ett s[ kallat hash algorithm .
 
 Po'ngen med ett 
