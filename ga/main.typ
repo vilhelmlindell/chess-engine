@@ -25,7 +25,7 @@
   numbering: "1",
 )
 
-= Introduction
+= Introduktion
 I detta gymnasiearbete är målet att undersöka hur man programmerar en schackmotor och förklara de algoritmer, tekniker och optimiseringar som används för att förbättra schackmotorn. Schackmotorer har funnits ända sedan 1770-talet men det var först 1950 då Alan Turing skapade den första datorn som kunde spela schack. Sedan dess har förbättringar inom både mjukvaran som bygger upp schackmotorn, samt enorma förbättringar inom hårdvaran, lett till att dagens schackmotorer är långt mer effektiva än de var tidigare.
 
 Ett modernt schackprogram är uppbyggt av ett antal komponenter som möjliggör en fungerande schackmotor. Först krävs ett effektivt sätt att förvara datan som bestämmer den nuvarande positionen för schackpartiet och ytterliggare värden som är användbara att förvara under programmets körning. Med detta som grund krävs det en funktion som genererar en lista över alla drag som är strikt lagliga i positionen eller pseudolagliga. En evalueringsfunktion används för att ge positionen ett heuristiskt värde vilket är väsentligt för att programmet ska kunna avgöra vilka positioner som är bättre än andra. Huvuddelen av programmet utgörs av sökningen, vars mål är att utifrån den nuvarande positionen, rekursivt söka igenom alla positioner som kan nås från den nuvarande positionen, och göra detta till ett visst djup. Grundalgoritm Min-Max används för detta, men mer optimiserade varianter av det används oftast, men i grunden uttnytjar det drag generingen samt evalueringen för att nå de möjlig noderna (schackpositionerna) som kan nås, och bestämma vilken linje som är bäst med hjälp av evalueringsfunktionen.
@@ -40,12 +40,12 @@ Viktigt att notera kan vara att 64 bitars talet är utlagt så att den första b
 
 . 12 Bitboards används för att representera positionen av alla pjäser på spel planen där varje bitboard representerar befintligheten av en vis typ av pjäs. I exemplet nedan visas bitboarden för de vita bönderna vid startpositionen. I koden så representerar den minst signifikanta biten, den bit vars värde är 2, A8 på schackbrädet medan den mest signifikanta biten representerar H1, och mellan dessa är indexeringen ökande enligt första ranken och därefter filen.
 
-#figure(
-	image("chess_position.png"),
-	caption: [
-		White Pawns
-	]
-) <white_pawns>
+//#figure(
+//	image("chess_position.png"),
+//	caption: [
+//		White Pawns
+//	]
+//) <white_pawns>
 
 En modern dator har en 64 bitars CPU, vilket innebär att den kan utföra operationer på 64 bitars tal väldigt snabbt på grund av hur de elektroniska kretsarna är strukturerade i den. Av denna anledning är användet av Bitboards optimalt eftersom CPUn kan utföra instruktioner direkt på den datan som representerar brädets status.
 
@@ -143,6 +143,7 @@ den har en for loop som letar igenom alla 1:or i bitboarden för alla hästar so
 = Evaluering
 Evalueringen är tvungen att ta hänsyn till en stor mängd faktorer när den ska ta fram ett heurestiskt värde för positionen. Den enklaste metoden är att kolla på materialet. Man ger varje pjäs ett värde i centipawns med en funktion som ses i följande kod.
 
+```rust
 pub fn centipawns(&self) -> i32 {
     match self {
         PieceType::Pawn => 100,
@@ -153,9 +154,9 @@ pub fn centipawns(&self) -> i32 {
         PieceType::King => 20000,
     }
 }
+```
 
 Därefter är det helt enkelt att summera värdet för alla pjäser som tillhör den spelare vars tur det är, och subtrahera värdet för motståndarens pjäser. Denna metod är en bra början men är bristfällig eftersom den inte bryr sig om var pjäser är positionerade på brädet. För att lösa detta använder jag i samband med materialet en array med statiska värden för hur värdefullt det är för en typ av pjäs att stå på en specifik ruta. En array som indexeras först med typen av pjäs och därefter 64 element för varje ruta möjliggör detta och värdena som jag använder togs fram av följadne. Vi kan ytterliggare förbättra detta genom att ha två arrayer, en för öppningen och en för slutspelet, eftersom hur värdefulla de olika rutorna är för olika pjäser förändrar sig mycket under spelets gång. Därefter tar vi fram ett flyttal mellan 0 och 1 som representerar hur nära slutspelet vi är, då 0 är precis efter öppningen och 1 är vid spelets slut. Denna tas fram genom
-$ 
 
 = Sokning
 Minimax är ett algoritm som används för att bestämma poängen efter ett visst mängd drag för ett noll-summa spel vilket är vad schack är. Minimax är beroende av en evalueringsfunktion som ger ett heurestiskt mått på hur väl det går för spelarna. I mitt schackprogram använder jag en variation av minimax som kallas för negamax, vilket simplifierar koden genom att uttnytja följande faktum
