@@ -1,15 +1,21 @@
 #align(center, text(17pt)[
-  *A fluid dynamic model
-  for glacier flow*
+  *Effektiv schackmotor*
 ])
 #grid(
   columns: (1fr, 1fr),
   align(center)[
-    Therese Tungsten \
-    Artos Institute \
-    #link("mailto:tung@artos.edu")
+    Vilhelm Lindell 
   ]
 )
+
+#set par(justify: true)
+#set text(
+  font: "Libertinus Serif",
+  size: 11pt,
+)
+
+#set heading(numbering: "1.")
+
 #set page(
   paper: "us-letter",
   header: align(right)[
@@ -19,27 +25,20 @@
   numbering: "1",
 )
 
-#set par(justify: true)
-#set text(
-  font: "Libertinus Serif",
-  size: 11pt,
-)
-
-#lorem(600)
-#set heading(numbering: "1.")
-
 = Introduction
-I detta gymnasiearbete är målet att undersöka hur man programmerar en shackdator som uttnytjar kända tekniker för att göra den mer effektiv. Schackdatorer har funnits ände sedan 1948 då Alan Turing skapade den första riktiga Schackdatorn. Sedan dess har vi utvecklat både mycket mer högpresterande datorer som kör schackdatorerna, samt mycket mer sofistikerade algoritmer och optimiseringar på mjukvarunivå som har härstammat från den enorma mängd.
+I detta gymnasiearbete är målet att undersöka hur man programmerar en schackmotor och förklara de algoritmer, tekniker och optimiseringar som används för att förbättra schackmotorn. Schackmotorer har funnits ända sedan 1770-talet men det var först 1950 då Alan Turing skapade den första datorn som kunde spela schack. Sedan dess har förbättringar inom både mjukvaran som bygger upp schackmotorn, samt enorma förbättringar inom hårdvaran, lett till att dagens schackmotorer är långt mer effektiva än de var tidigare.
 
-I detta gymnasiearbete är målet att undersöka hur min schackdator är programmerad och förklara de algoritmer, tekniker och optimiseringar som används för att förbättra schackdatorn.
+Ett modernt schackprogram är uppbyggt av ett antal komponenter som möjliggör en fungerande schackmotor. Först krävs ett effektivt sätt att förvara datan som bestämmer den nuvarande positionen för schackpartiet och ytterliggare värden som är användbara att förvara under programmets körning. Med detta som grund krävs det en funktion som genererar en lista över alla drag som är strikt lagliga i positionen eller pseudolagliga. En evalueringsfunktion används för att ge positionen ett heuristiskt värde vilket är väsentligt för att programmet ska kunna avgöra vilka positioner som är bättre än andra. Huvuddelen av programmet utgörs av sökningen, vars mål är att utifrån den nuvarande positionen, rekursivt söka igenom alla positioner som kan nås från den nuvarande positionen, och göra detta till ett visst djup. Grundalgoritm Min-Max används för detta, men mer optimiserade varianter av det används oftast, men i grunden uttnytjar det drag generingen samt evalueringen för att nå de möjlig noderna (schackpositionerna) som kan nås, och bestämma vilken linje som är bäst med hjälp av evalueringsfunktionen.
 
-Min schackdator som jag kommer att referera till är skrivet i programmeringsspråket Rust, men eftersom koden kan vara svårtolkad om man inte är van vid den kommer jag främst använda pseudokod när jag förklarar de algoritmer som jag har uttnytjat.
-
-När man bygger en schackdator är den vanligaste metoden att man har en sökfunktion som söker igenom alla drag som kan göras till ett visst djup med den så kallade Min max algoritmen.
+Den schackmotor som jag har programmerat i samband med detta projekt är skrivet i programmeringsspråket Rust, och kommer refereras till för att klargöra hur koden som kör programmet ser ut för att på så sätt få en bättre bild över hur programmet fungerar. Eftersom att Rust-koden i sig kan vara svårtolkad om man inte är van vid hur den ser ut, kommer jag i vissa fall istället använda pseudokod i mina exempel. Jag kommer utelämna stora delar av programmet eftersom koden är aldelles för lång för att kunna förklara varenda del, och jag kommer därmed fokusera på de generella algoritmerna och metoderna som jag använder.
 
 = Struktur
 
-För att representera en schackposition på ett sätt som är optimalt för datorn att hantera används så kallade Bitboards. En Bitboard är ett 64-bitar långt binärt tal där vi låter varje bit i talet representera en ruta på schackbrädet. Ifall en bit i talet är 1 eller 0 representerar därefter ifall en vis typ av pjäs finns på den rutan eller ej. 12 Bitboards används för att representera positionen av alla pjäser på spel planen där varje bitboard representerar befintligheten av en vis typ av pjäs. I exemplet nedan visas bitboarden för de vita bönderna vid startpositionen. I koden så representerar den minst signifikanta biten, den bit vars värde är 2, A8 på schackbrädet medan den mest signifikanta biten representerar H1, och mellan dessa är indexeringen ökande enligt första ranken och därefter filen.
+För att representera en schackposition på ett sätt som är optimalt för datorn att hantera används så kallade Bitboards. En Bitboard är ett 64-bitar långt binärt tal där vi låter varje bit i talet representera en ruta på schackbrädet.  Varje bit i talet kan antingen vara 1 eller 0, och värdet på biten indikerar att en typ av pjäs som till exempel vita bönder finns på den rutan som är associerad med biten, eller om rutan är tom. I exemplet <white_pawns> kan bitboarden för de vita bönderna vid startpositionen ses. Minst 12 bitboards krävs för att representera brädan på detta vis, en per typ av pjäs och färgen på pjäsen, men ytterliggare Bitboards för 
+
+Viktigt att notera kan vara att 64 bitars talet är utlagt så att den första biten, även känt som den minst signifikanta biten, representerar A8, medan den sista biten, även kallat den mest signifikanta biten representerar H1. I <
+
+. 12 Bitboards används för att representera positionen av alla pjäser på spel planen där varje bitboard representerar befintligheten av en vis typ av pjäs. I exemplet nedan visas bitboarden för de vita bönderna vid startpositionen. I koden så representerar den minst signifikanta biten, den bit vars värde är 2, A8 på schackbrädet medan den mest signifikanta biten representerar H1, och mellan dessa är indexeringen ökande enligt första ranken och därefter filen.
 
 #figure(
 	image("chess_position.png"),
@@ -65,15 +64,34 @@ och trailing zeros returnerar antalet bitar i slutet av talet vilket är samma s
 Den sista nämnvärda operationen på bitboards som är användbar är en så kallad population count på ett 64 bitars tal som helt enkelt returnerar antalet bitar i talet som är 1, vilket för en Bitboard ger oss antalet av den pjäsen som finns på schackbrädet.
 
 
-
-
-= Evaluering
 = Drag generering 
+För att kunna ha draggenerering krävs en datastruktur för att representera hur ett drag ser ut. För detta krävs två tal vars värden ligger mellan 0 och 63, ett för rutan som pjäsen börjar på, samt ett för rutan som pjäsen slutar på. Utöver detta krävs ytterliggare information om vilken typ av drag det är och i mitt program representeras det med detta enum. En enum representeras internt av ett tal då talets värde korrespenderar med en av dessa alternativen som listas i enumet. På så sätt förvarar vi i draget vilken av följande typ av drag som det är. Anledningen till att dessa krävs är eftersom den typ av drag som listas här, förutom Normal och DoublePush, har någon form av sidoeffekt och att snabbt kunna kolla upp vilken typ av drag det är med en enum förvarad i draget gör att vi lättare kan kolla vilken typ av drag det är och därefter genomföra den sidoeffekt som påverkar brädet efter draget görs. 
 
-Drag genereringen är beroende av att schackbrädets rutor indexeras på ett visst sätt som kan ses i följande bild
+```rust
+#[repr(u8)]
+pub enum MoveType {
+    Normal,
+    KingsideCastle,
+    QueensideCastle,
+    DoublePush,
+    EnPassant,
+    RookPromotion,
+    BishopPromotion,
+    QueenPromotion,
+    KnightPromotion,
+}
+```
+
+Internt så kan informationen om start och slutpositionen, samt slutpositionen representeras med endast 16 bitar vilket ses i följande kod (u16 är ett 16 bitars tal), detta är möjligt eftersom typ av dragen har 9 olika värden och start och slut representeras med 0 ti
+
+```rust
+pub struct Move {
+    bits: u16,
+}
+```
 
 
-Detta är nödvändigt eftersom varje drag representeras på följande sätt, rutan som pjäsen börjar på, rutan som pjäsen slutar på, samt några extra bitars information som representerar vilken typ av drag det är. Rutorna representeras med
+
 
 ```rust
 pub enum Direction {
@@ -88,7 +106,7 @@ pub enum Direction {
 }
 ```
 
-Drag generingen är den delen av schackdatorn där användningen av bitboards blir som mest fördelaktig på grund av de operationer som effektiv kan manipulera bitboardsen. Schack har 6 olika pjäser som kan röra sig på olika sätt. Men för drag generingen är den generella principen samma, först använder vi lsb för att få positionen på brädet av en pjäs av en specifik typ. Detta låter oss loopa igenom alla 64 bitar för att hitta pjäserna eftersom vi bara bryr oss om bitarna som är 1 och därmed har en pjäs. 
+Drag generingen är den delen av Schackmotor där användningen av bitboards blir som mest fördelaktig på grund av de operationer som effektiv kan manipulera bitboardsen. Schack har 6 olika pjäser som kan röra sig på olika sätt. Men för drag generingen är den generella principen samma, först använder vi lsb för att få positionen på brädet av en pjäs av en specifik typ. Detta låter oss loopa igenom alla 64 bitar för att hitta pjäserna eftersom vi bara bryr oss om bitarna som är 1 och därmed har en pjäs. 
 
 Därefter tar vi in en funktion som utifrån en startruta för en viss pjäs returnerar slutrutan för draget. 
 
@@ -121,6 +139,23 @@ fn generate_knight_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Bo
 
 den har en for loop som letar igenom alla 1:or i bitboarden för alla hästar som tillhör spelar som ska göra ett drag.
 
+
+= Evaluering
+Evalueringen är tvungen att ta hänsyn till en stor mängd faktorer när den ska ta fram ett heurestiskt värde för positionen. Den enklaste metoden är att kolla på materialet. Man ger varje pjäs ett värde i centipawns med en funktion som ses i följande kod.
+
+pub fn centipawns(&self) -> i32 {
+    match self {
+        PieceType::Pawn => 100,
+        PieceType::Knight => 320,
+        PieceType::Bishop => 330,
+        PieceType::Rook => 500,
+        PieceType::Queen => 900,
+        PieceType::King => 20000,
+    }
+}
+
+Därefter är det helt enkelt att summera värdet för alla pjäser som tillhör den spelare vars tur det är, och subtrahera värdet för motståndarens pjäser. Denna metod är en bra början men är bristfällig eftersom den inte bryr sig om var pjäser är positionerade på brädet. För att lösa detta använder jag i samband med materialet en array med statiska värden för hur värdefullt det är för en typ av pjäs att stå på en specifik ruta. En array som indexeras först med typen av pjäs och därefter 64 element för varje ruta möjliggör detta och värdena som jag använder togs fram av följadne. Vi kan ytterliggare förbättra detta genom att ha två arrayer, en för öppningen och en för slutspelet, eftersom hur värdefulla de olika rutorna är för olika pjäser förändrar sig mycket under spelets gång. Därefter tar vi fram ett flyttal mellan 0 och 1 som representerar hur nära slutspelet vi är, då 0 är precis efter öppningen och 1 är vid spelets slut. Denna tas fram genom
+$ 
 
 = Sokning
 Minimax är ett algoritm som används för att bestämma poängen efter ett visst mängd drag för ett noll-summa spel vilket är vad schack är. Minimax är beroende av en evalueringsfunktion som ger ett heurestiskt mått på hur väl det går för spelarna. I mitt schackprogram använder jag en variation av minimax som kallas för negamax, vilket simplifierar koden genom att uttnytja följande faktum
@@ -174,3 +209,4 @@ När vi söker med minimax kommer vi att stötta på samma position senare i sö
 Zobrist hashing 'r ett s[ kallat hash algorithm .
 
 Po'ngen med ett 
+
