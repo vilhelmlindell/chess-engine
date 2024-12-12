@@ -30,7 +30,7 @@ pub struct Search {
 
 #[derive(Default, Clone, Copy)]
 pub struct SearchArgs {
-    pub time_left: [u32; 2],
+    pub time_left: Option<[u32; 2]>, // None here signifies infinite time
     pub time_increment: [u32; 2],
 }
 
@@ -68,13 +68,13 @@ impl Search {
         self.max_time = self.calculate_time(board);
         println!("{}", self.max_time);
 
-        let vote_map = [0; 64 * 64];
-        let available_threads: usize = thread::available_parallelism().unwrap().into();
-        let mut threads = Vec::with_capacity(available_threads);
+        //let vote_map = [0; 64 * 64];
+        //let available_threads: usize = thread::available_parallelism().unwrap().into();
+        //let mut threads = Vec::with_capacity(available_threads);
 
-        for i in 0..available_threads {
-            threads.push(thread::spawn(move || {}));
-        }
+        //for i in 0..available_threads {
+        //    threads.push(thread::spawn(move || {}));
+        //}
 
         board.transposition_table.clear();
 
@@ -84,25 +84,32 @@ impl Search {
         }
 
         for depth in 1..=MAX_DEPTH as u32 {
-            println!("Depth {}", depth);
             let alpha = -MAX_EVAL;
             let beta = MAX_EVAL;
 
             let eval = self.pvs(board, depth, alpha, beta, 0);
 
-            if self.start_time.elapsed().as_millis() as u32 > self.max_time {
-                break;
-            }
-
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
+            self.result.pv = self.extract_pv(kj);
+            self.result.time = self.start_time.elapsed().as_millis() as u32;
 
             self.extract_pv(board);
+            Search::print_info(&self.result);
+
+            if self.start_time.elapsed().as_millis() as u32 > self.max_time {
+                Search::print_info(&self.result);
+            }
         }
 
-        self.result.pv = self.pv.clone();
-        self.result.time = self.start_time.elapsed().as_millis() as u32;
         self.result.clone()
+    }
+
+    fn print_info(result: &SearchResult) {
+        print!(
+            "info depth {} score cp {} time {} nodes {} nps {} ",
+            result.depth_reached, result.highest_eval, result.time, result.nodes, result.nodes
+        );
     }
 
     fn calculate_time(&mut self, board: &Board) -> u32 {
@@ -205,7 +212,7 @@ impl Search {
 
             board.unmake_move(mov);
 
-            if score >= beta {
+            if score >= beta { // Move is too good, the opponent has better option
                 let entry = TranspositionEntry::new(depth, beta, mov, NodeType::LowerBound, board.zobrist_hash);
                 board.transposition_table.store(entry);
                 if !board.is_capture(mov) {
@@ -214,7 +221,7 @@ impl Search {
                 return beta;
             }
 
-            if score > alpha {
+            if score > alpha { // Move is within 
                 evaluation_bound = NodeType::Exact;
                 best_move = Some(mov);
                 alpha = score;
@@ -272,8 +279,7 @@ impl Search {
         alpha
     }
 
-    pub fn extract_pv(&mut self, board: &mut Board) {
-        self.pv.clear();
+    pub fn extract_pv(&mut self, board: &mut Board) -> Vec<Move> {
         let mut current_hash = board.zobrist_hash;
 
         while let Some(entry) = board.transposition_table.probe(current_hash) {

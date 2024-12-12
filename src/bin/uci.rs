@@ -166,7 +166,7 @@ impl Uci {
         println!();
         println!(
             "bestmove {}",
-            result.pv.first().expect("No best move found, either due to terminal node or transposition table being overwritten")
+            result.pv.first().expect("No best move found")
         );
     }
     fn ponder(&self) {}

@@ -16,5 +16,6 @@ imageproc = "0.25.0"
 rusttype = "0.9.3"
 
 [profile.release]
+debug = true
 lto = "fat"
 opt-level = 3
