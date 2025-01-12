@@ -365,7 +365,8 @@ fn push_pawns(pawns: Bitboard, empty_squares: Bitboard, side_to_move: Side) -> B
 fn can_castle(board: &Board, squares: Bitboard, king_squares: [usize; 2]) -> bool {
     // Check if all squares are unoccupied and not attacked
     let is_blocked = squares & board.occupied_squares != 0;
-    let is_intercepted = king_squares.iter().any(|sq| board.attacked(*sq));
+    //let is_intercepted = king_squares.iter().any(|sq| board.attacked(*sq));
+    let is_intercepted = board.attacked(king_squares[0]) || board.attacked(king_squares[1]);
     !is_blocked && !is_intercepted
 }
 

@@ -23,6 +23,12 @@ pub const RANK_7: Bitboard = Bitboard(0x000000000000FF00);
 pub const RANK_8: Bitboard = Bitboard(0x00000000000000FF);
 pub const RANKS: [Bitboard; 8] = [RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8];
 
+const BLACK_QUEENSIDE_START_MASK: Bitboard = Bitboard((1 << 0) | (1 << 4)); // a8 and e8
+const BLACK_KINGSIDE_START_MASK: Bitboard = Bitboard((1 << 7) | (1 << 4)); // h8 and e8
+const WHITE_QUEENSIDE_START_MASK: Bitboard = Bitboard((1 << 56) | (1 << 60)); // a1 and e1
+const WHITE_KINGSIDE_START_MASK: Bitboard = Bitboard((1 << 63) | (1 << 60)); // h1 and e1
+const CASTLING_START_SQUARES: Bitboard = Bitboard((1 << 0) | (1 << 4) | (1 << 7) | (1 << 56) | (1 << 60) | (1 << 63));
+
 pub fn square_from_string(square: &str) -> usize {
     let files = "abcdefgh";
     let rank = files.chars().position(|char| square.as_bytes()[0] as char == char).unwrap();
@@ -215,18 +221,21 @@ impl Board {
         let mut state = BoardState::from_state(self.state());
 
         let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
+        let move_bitboard = Bitboard::from_square(mov.from()) | Bitboard::from_square(mov.to());
 
-        if mov.from() == 0 || mov.from() == 4 || mov.to() == 0 {
-            state.castling_rights[Side::Black].queenside = false;
-        }
-        if mov.from() == 7 || mov.from() == 4 || mov.to() == 7 {
-            state.castling_rights[Side::Black].kingside = false;
-        }
-        if mov.from() == 56 || mov.from() == 60 || mov.to() == 56 {
-            state.castling_rights[Side::White].queenside = false;
-        }
-        if mov.from() == 63 || mov.from() == 60 || mov.to() == 63 {
-            state.castling_rights[Side::White].kingside = false;
+        if move_bitboard & CASTLING_START_SQUARES != 0 {
+            if move_bitboard & BLACK_QUEENSIDE_START_MASK != 0 {
+                state.castling_rights[Side::Black].queenside = false;
+            }
+            if move_bitboard & BLACK_KINGSIDE_START_MASK != 0 {
+                state.castling_rights[Side::Black].kingside = false;
+            }
+            if move_bitboard & WHITE_QUEENSIDE_START_MASK != 0 {
+                state.castling_rights[Side::White].queenside = false;
+            }
+            if move_bitboard & WHITE_KINGSIDE_START_MASK != 0 {
+                state.castling_rights[Side::White].kingside = false;
+            }
         }
 
         let castling_rights_bits_after = Self::castling_rights_bits(state.castling_rights);
@@ -278,6 +287,10 @@ impl Board {
         self.side = self.side.enemy();
         self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
         self.absolute_pinned_squares = self.absolute_pins();
+
+        if self.states.len() % 1000 == 0 {
+            //println!("Len: {}", self.states.len());
+        }
         self.states.push(state);
     }
     pub fn unmake_move(&mut self, mov: Move) {
@@ -587,6 +600,7 @@ impl<T, const N: usize> IndexMut<Side> for [T; N] {
 pub struct BoardState {
     // Copied
     pub halfmove_clock: u32,
+    pub zobrist_hash: u64,
 
     // Recalculated
     pub castling_rights: [CastlingRights; 2],

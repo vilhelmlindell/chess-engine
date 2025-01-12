@@ -5,7 +5,8 @@ use crate::evaluation::evaluate;
 use crate::move_generation::generate_moves;
 use crate::search::transposition_table::{NodeType, TranspositionEntry};
 use std::cmp::Ordering;
-use std::thread;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::Instant;
 
 use super::book_moves::get_book_move;
@@ -19,19 +20,50 @@ const KILLER_MOVE_SCORE: i32 = 2000;
 
 const MAX_EVAL: i32 = 100000000;
 
+#[derive(PartialEq, Copy, Clone, Default)]
+pub struct SearchParams {
+    //pub depth: i8,               // Maximum depth to search to
+    //pub nodes: usize,            // Maximum number of nodes to search
+    pub move_time: u128,         // Maximum time per move to search
+    pub clock: Clock,     // Time available for entire game
+    pub search_mode: SearchMode, // Defines the mode to search in
+    //pub quiet: bool,             // No intermediate search stats updates
+}
+
 pub struct Search {
-    pub args: SearchArgs,
+    pub params: SearchParams,
     pub result: SearchResult,
-    pub max_time: u32,
+    pub max_time: u128,
     pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
     pub pv: Vec<Move>,
+    pub should_quit: Arc<AtomicBool>, // Shared atomic flag
     start_time: Instant,
 }
 
-#[derive(Default, Clone, Copy)]
-pub struct SearchArgs {
-    pub time_left: Option<[u32; 2]>, // None here signifies infinite time
-    pub time_increment: [u32; 2],
+impl Search {
+    pub fn should_quit(&self) -> bool {
+        return self.should_quit.load(std::sync::atomic::Ordering::Relaxed) | (self.start_time.elapsed().as_millis() > self.max_time);
+    }
+}
+
+#[derive(PartialEq, Copy, Clone, Default)]
+pub struct Clock {
+    pub time: [u128; 2],                // Time on the clock in milliseconds
+    pub inc: [u128; 2],                 // Time increment in milliseconds
+    pub moves_to_go: Option<usize>, // Moves to go to next time control (0 = sudden death)
+}
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum SearchMode {
+    Infinite,
+    MoveTime,
+    Clock
+}
+
+impl Default for SearchMode {
+    fn default() -> Self {
+        Self::Infinite
+    }
 }
 
 #[derive(Default, Clone)]
@@ -48,24 +80,38 @@ pub struct SearchResult {
 impl Default for Search {
     fn default() -> Self {
         Self {
-            args: SearchArgs::default(),
+            params: SearchParams::default(),
             result: SearchResult::default(),
             start_time: Instant::now(),
             max_time: 0,
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             pv: Vec::with_capacity(MAX_DEPTH),
+            should_quit: Arc::new(AtomicBool::new(false)),
         }
     }
 }
 
 impl Search {
-    pub fn search(&mut self, search_args: SearchArgs, board: &mut Board) -> SearchResult {
-        self.args = search_args;
+    pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
+        self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
+
+        //if let Some(book_move) = get_book_move(board, 1.0) {
+        //    self.result.pv.push(book_move);
+        //    return self.result.clone();
+        //}
+
+        self.params = search_params;
         self.pv.clear();
         self.result = SearchResult::default();
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
-        self.max_time = self.calculate_time(board);
+
+        // TODO: Add infinite mode as a const parameter to search instead of using u32::max_value
+        self.max_time = match search_params.search_mode {
+            SearchMode::Infinite => u128::max_value(),
+            SearchMode::MoveTime => search_params.move_time,
+            SearchMode::Clock => self.calculate_time(board),
+        };
         println!("{}", self.max_time);
 
         //let vote_map = [0; 64 * 64];
@@ -78,43 +124,39 @@ impl Search {
 
         board.transposition_table.clear();
 
-        if let Some(book_move) = get_book_move(board, 1.0) {
-            self.result.pv.push(book_move);
-            return self.result.clone();
-        }
-
         for depth in 1..=MAX_DEPTH as u32 {
+            self.result.nodes = 0;
+
             let alpha = -MAX_EVAL;
             let beta = MAX_EVAL;
 
             let eval = self.pvs(board, depth, alpha, beta, 0);
 
+            // We quit immediately since an interrupted search will be not that useful
+            if self.should_quit() {
+                break;
+            }
+
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
-            self.result.pv = self.extract_pv(kj);
+            self.result.pv = self.extract_pv(depth, board);
             self.result.time = self.start_time.elapsed().as_millis() as u32;
-
-            self.extract_pv(board);
             Search::print_info(&self.result);
-
-            if self.start_time.elapsed().as_millis() as u32 > self.max_time {
-                Search::print_info(&self.result);
-            }
         }
 
         self.result.clone()
     }
 
     fn print_info(result: &SearchResult) {
-        print!(
+        println!(
             "info depth {} score cp {} time {} nodes {} nps {} ",
-            result.depth_reached, result.highest_eval, result.time, result.nodes, result.nodes
+            result.depth_reached, result.highest_eval, result.time, result.nodes, (result.nodes as f32 / result.time as f32 * 1000.0) as u32
         );
     }
 
-    fn calculate_time(&mut self, board: &Board) -> u32 {
-        let half_moves_left = Search::remaining_half_moves(board.total_material);
-        let time_left = self.args.time_left[board.side] + self.args.time_increment[board.side] * half_moves_left / 2;
+    fn calculate_time(&mut self, board: &Board) -> u128 {
+        let half_moves_left = Search::remaining_half_moves(board.total_material) as u128;
+        let time_left = self.params.clock.time[board.side] + self.params.clock.inc[board.side] * half_moves_left / 2;
         time_left / half_moves_left
     }
     // Approximation for amount of half moves remaining
@@ -128,7 +170,7 @@ impl Search {
     }
 
     fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
-        if self.start_time.elapsed().as_millis() as u32 > self.max_time {
+        if self.should_quit() {
             return alpha;
         }
 
@@ -212,7 +254,8 @@ impl Search {
 
             board.unmake_move(mov);
 
-            if score >= beta { // Move is too good, the opponent has better option
+            if score >= beta {
+                // Move is too good, the opponent has better option
                 let entry = TranspositionEntry::new(depth, beta, mov, NodeType::LowerBound, board.zobrist_hash);
                 board.transposition_table.store(entry);
                 if !board.is_capture(mov) {
@@ -221,7 +264,8 @@ impl Search {
                 return beta;
             }
 
-            if score > alpha { // Move is within 
+            if score > alpha {
+                // Move is within
                 evaluation_bound = NodeType::Exact;
                 best_move = Some(mov);
                 alpha = score;
@@ -238,7 +282,7 @@ impl Search {
     }
 
     fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
-        if self.start_time.elapsed().as_millis() as u32 > self.max_time {
+        if self.should_quit() {
             return alpha;
         }
 
@@ -279,26 +323,30 @@ impl Search {
         alpha
     }
 
-    pub fn extract_pv(&mut self, board: &mut Board) -> Vec<Move> {
+    pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
         let mut current_hash = board.zobrist_hash;
+        let mut pv = Vec::new();
+        let mut i = 0;
 
         while let Some(entry) = board.transposition_table.probe(current_hash) {
-            if entry.hash != current_hash || self.pv.len() >= MAX_DEPTH {
+            if entry.hash != current_hash || i >= depth {
                 break;
             }
 
             let pv_move = entry.best_move;
-            self.pv.push(pv_move);
+            pv.push(pv_move);
 
             // Make the move on the board to get the next position
             board.make_move(pv_move);
             current_hash = board.zobrist_hash;
+            i += 1;
         }
 
         // Unmake all the moves to restore the original board state
-        for &mov in self.pv.iter().rev() {
+        for &mov in pv.iter().rev() {
             board.unmake_move(mov);
         }
+        pv
     }
 
     pub fn order_moves(&self, board: &Board, moves: &mut [Move], ply: u32) {

@@ -1,13 +1,28 @@
-use std::io;
+use std::io::{self, BufRead};
+use std::option::Option;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread::{self, spawn, JoinHandle};
 use std::time::Instant;
+use std::sync::mpsc;
 
 use chess_engine::board::{Board, Side};
 use chess_engine::move_generation::generate_moves;
 use chess_engine::perft::perft;
-use chess_engine::search::{Search, SearchArgs};
+use chess_engine::search::{Search, SearchMode, SearchParams, SearchResult};
 
 fn main() {
     Uci::start();
+}
+
+fn spawn_stdin_channel() -> mpsc::Receiver<String> {
+    let (tx, rx) = mpsc::channel::<String>();
+    thread::spawn(move || loop {
+        let mut buffer = String::new();
+        io::stdin().read_line(&mut buffer).unwrap();
+        tx.send(buffer).unwrap();
+    });
+    rx
 }
 
 pub struct Uci {
@@ -16,7 +31,8 @@ pub struct Uci {
     board: Board,
     is_debug: bool,
     is_running: bool,
-    search: Search,
+    should_quit_search: Arc<AtomicBool>,
+    search_thread: Option<JoinHandle<SearchResult>>,
 }
 
 impl Uci {
@@ -27,35 +43,80 @@ impl Uci {
             board: Board::start_pos(),
             is_debug: false,
             is_running: true,
-            search: Search::default(),
+            should_quit_search: Arc::new(AtomicBool::new(false)),
+            search_thread: None,
         };
+
+        let stdin_channel = spawn_stdin_channel();
+
         while uci.is_running {
-            uci.process_input();
+            match stdin_channel.try_recv() {
+                Ok(line) => {
+                    uci.parse_command(line);
+                },
+                Err(mpsc::TryRecvError::Empty) => {},
+                Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
+            }
+
+            // Check if search has finished
+            uci.check_search_result();
+
+            // Small sleep to prevent CPU spinning
+            thread::sleep(std::time::Duration::from_millis(1));
         }
     }
-    fn process_input(&mut self) {
-        let mut command = String::new();
-        io::stdin().read_line(&mut command).unwrap();
-        self.parse_command(command);
+
+    fn check_search_result(&mut self) {
+        if let Some(handle) = self.search_thread.take() {
+            if handle.is_finished() {
+                match handle.join() {
+                    Ok(result) => self.print_search_result(result),
+                    Err(e) => eprintln!("Search thread panicked: {:?}", e),
+                }
+            } else {
+                // Put the handle back if search isn't finished
+                self.search_thread = Some(handle);
+            }
+        }
     }
+
+    fn print_search_result(&self, result: SearchResult) {
+        // Print the search result information
+        print!(
+            "info depth {} score cp {} time {} nodes {} nps {} ",
+            result.depth_reached,
+            result.highest_eval,
+            result.time,
+            result.nodes,
+            if result.time > 0 { result.nodes * 1000 / result.time } else { 0 }
+        );
+        print!("pv");
+        for mov in &result.pv {
+            print!(" {}", mov);
+        }
+        println!();
+        println!("bestmove {}", result.pv.first().expect("No best move found"));
+    }
+
     fn parse_command(&mut self, full_command: String) {
-        println!("{}", full_command);
-        let command = full_command.split_whitespace().collect::<Vec<&str>>()[0];
+        let command = full_command.split_whitespace().next().unwrap_or("");
         match command {
             "uci" => self.identify(),
             "debug" => self.set_debug(full_command),
             "isready" => self.synchronize(),
-            //"setoption" => self.set_option(full_command),
-            //"register" => self.register(full_command),
-            //"ucinewgame" => self.new_game(),
             "position" => self.set_position(full_command),
             "go" => self.go(full_command),
-            //"stop" => self.stop(),
-            //"ponderhit" => ,
-            "quit" => self.quit(),
+            "stop" => {
+                self.should_quit_search.store(true, Ordering::SeqCst);
+            }
+            "quit" => {
+                self.should_quit_search.store(true, Ordering::SeqCst);
+                self.quit();
+            }
             _ => {}
         }
     }
+
     fn identify(&self) {
         println!("id name chess_engine");
         println!("id name vilhelm lindell");
@@ -112,10 +173,18 @@ impl Uci {
         }
         self.board = board;
     }
+
     fn go(&mut self, command: String) {
+        // Stop any existing search
+        if let Some(handle) = self.search_thread.take() {
+            self.should_quit_search.store(true, Ordering::SeqCst);
+            let _ = handle.join();
+        }
+
         let mut words = command.split_whitespace().peekable();
         words.next();
-        let mut search_args = SearchArgs::default();
+        let mut search_params = SearchParams::default();
+
         while let Some(token) = words.next() {
             match token {
                 "perft" => {
@@ -128,57 +197,65 @@ impl Uci {
                     return;
                 }
                 "wtime" => {
-                    let time_left = words.peek().expect("No time given for wtime, incorrect uci command").parse::<u32>().expect("Time was not given as a number");
-                    search_args.time_left[Side::White] = time_left;
+                    search_params.search_mode = SearchMode::Clock;
+                    if let Some(&time_str) = words.peek() {
+                        if let Ok(time_left) = time_str.parse() {
+                            search_params.clock.time[Side::White] = time_left;
+                            words.next();
+                        }
+                    }
                 }
                 "btime" => {
-                    let time_left = words.peek().expect("No time given for btime, incorrect uci command").parse::<u32>().expect("Time was not given as a number");
-                    search_args.time_left[Side::Black] = time_left;
+                    search_params.search_mode = SearchMode::Clock;
+                    if let Some(&time_str) = words.peek() {
+                        if let Ok(time_left) = time_str.parse() {
+                            search_params.clock.time[Side::Black] = time_left;
+                            words.next();
+                        }
+                    }
                 }
                 "winc" => {
-                    let time_increment = words.peek().expect("No time given for winc, incorrect uci command").parse::<u32>().expect("Time was not given as a number");
-                    search_args.time_increment[Side::White] = time_increment;
+                    if let Some(&inc_str) = words.peek() {
+                        if let Ok(inc) = inc_str.parse() {
+                            search_params.clock.inc[Side::White] = inc;
+                            words.next();
+                        }
+                    }
                 }
                 "binc" => {
-                    let time_increment = words.peek().expect("No time given for binc, incorrect uci command").parse::<u32>().expect("Time was not given as a number");
-                    search_args.time_increment[Side::Black] = time_increment;
+                    if let Some(&inc_str) = words.peek() {
+                        if let Ok(inc) = inc_str.parse() {
+                            search_params.clock.inc[Side::Black] = inc;
+                            words.next();
+                        }
+                    }
                 }
-                //"infinite" => search_option.infinite = true,
-                //"depth" => {
-                //    if let Some(depth_string) = words.next() {
-                //        if let Ok(depth) = depth_string.parse::<u32>() {
-                //            search_option.depth = depth
-                //        }
-                //    }
-                //}
+                "movetime" => {
+                    if let Some(&time_str) = words.peek() {
+                        if let Ok(move_time) = time_str.parse() {
+                            search_params.move_time = move_time;
+                            search_params.search_mode = SearchMode::MoveTime;
+                            words.next();
+                        }
+                    }
+                }
+                "infinite" => search_params.search_mode = SearchMode::Infinite,
                 _ => {}
             }
         }
-        let result = self.search.search(search_args, &mut self.board);
-        print!(
-            "info depth {} score cp {} time {} nodes {} nps {} ",
-            result.depth_reached, result.highest_eval, result.time, result.nodes, result.nodes
-        );
-        print!("pv");
-        for mov in &result.pv {
-            print!(" {}", mov);
-        }
-        println!();
-        println!(
-            "bestmove {}",
-            result.pv.first().expect("No best move found")
-        );
+
+        let mut search = Search::default();
+        let mut board_clone = self.board.clone();
+        search.should_quit = self.should_quit_search.clone();
+
+        self.search_thread = Some(thread::spawn(move || {
+            let result = search.search(search_params, &mut board_clone);
+            result
+        }));
     }
+
     fn ponder(&self) {}
     fn quit(&mut self) {
         self.is_running = false;
     }
 }
-
-//pub fn start() {
-//    loop {
-//        let command = String::new();
-//        io::stdin().read_line(&mut command);
-//        handle_command(&command);
-//    }
-//}
