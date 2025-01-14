@@ -24,10 +24,10 @@ const MAX_EVAL: i32 = 100000000;
 pub struct SearchParams {
     //pub depth: i8,               // Maximum depth to search to
     //pub nodes: usize,            // Maximum number of nodes to search
-    pub move_time: u128,         // Maximum time per move to search
-    pub clock: Clock,     // Time available for entire game
+    pub move_time: u128, // Maximum time per move to search
+    pub clock: Clock,    // Time available for entire game
     pub search_mode: SearchMode, // Defines the mode to search in
-    //pub quiet: bool,             // No intermediate search stats updates
+                         //pub quiet: bool,             // No intermediate search stats updates
 }
 
 pub struct Search {
@@ -37,6 +37,7 @@ pub struct Search {
     pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
     pub pv: Vec<Move>,
     pub should_quit: Arc<AtomicBool>, // Shared atomic flag
+    pub root_ply: u32,
     start_time: Instant,
 }
 
@@ -48,8 +49,8 @@ impl Search {
 
 #[derive(PartialEq, Copy, Clone, Default)]
 pub struct Clock {
-    pub time: [u128; 2],                // Time on the clock in milliseconds
-    pub inc: [u128; 2],                 // Time increment in milliseconds
+    pub time: [u128; 2],            // Time on the clock in milliseconds
+    pub inc: [u128; 2],             // Time increment in milliseconds
     pub moves_to_go: Option<usize>, // Moves to go to next time control (0 = sudden death)
 }
 
@@ -57,7 +58,7 @@ pub struct Clock {
 pub enum SearchMode {
     Infinite,
     MoveTime,
-    Clock
+    Clock,
 }
 
 impl Default for SearchMode {
@@ -82,6 +83,7 @@ impl Default for Search {
         Self {
             params: SearchParams::default(),
             result: SearchResult::default(),
+            root_ply: 0,
             start_time: Instant::now(),
             max_time: 0,
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
@@ -95,16 +97,17 @@ impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
 
-        //if let Some(book_move) = get_book_move(board, 1.0) {
-        //    self.result.pv.push(book_move);
-        //    return self.result.clone();
-        //}
+        if let Some(book_move) = get_book_move(board, 1.0) {
+            self.result.pv.push(book_move);
+            return self.result.clone();
+        }
 
         self.params = search_params;
         self.pv.clear();
         self.result = SearchResult::default();
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
+        self.root_ply = board.ply;
 
         // TODO: Add infinite mode as a const parameter to search instead of using u32::max_value
         self.max_time = match search_params.search_mode {
@@ -112,7 +115,7 @@ impl Search {
             SearchMode::MoveTime => search_params.move_time,
             SearchMode::Clock => self.calculate_time(board),
         };
-        println!("{}", self.max_time);
+        println!("search time: {} ms", self.max_time);
 
         //let vote_map = [0; 64 * 64];
         //let available_threads: usize = thread::available_parallelism().unwrap().into();
@@ -122,7 +125,7 @@ impl Search {
         //    threads.push(thread::spawn(move || {}));
         //}
 
-        board.transposition_table.clear();
+        //board.transposition_table.clear();
 
         for depth in 1..=MAX_DEPTH as u32 {
             self.result.nodes = 0;
@@ -150,7 +153,11 @@ impl Search {
     fn print_info(result: &SearchResult) {
         println!(
             "info depth {} score cp {} time {} nodes {} nps {} ",
-            result.depth_reached, result.highest_eval, result.time, result.nodes, (result.nodes as f32 / result.time as f32 * 1000.0) as u32
+            result.depth_reached,
+            result.highest_eval,
+            result.time,
+            result.nodes,
+            (result.nodes as f32 / result.time as f32 * 1000.0) as u32
         );
     }
 
@@ -176,7 +183,26 @@ impl Search {
 
         self.result.nodes += 1;
 
-        // Transposition table lookup
+        if board.state().halfmove_clock >= 100 {
+            return 0;
+        }
+
+        if board.ply - board.state().last_irreversible_ply >= 4 {
+            let mut ply = (board.ply - 2) as i32;
+            let mut count = 0;
+            while ply >= board.state().last_irreversible_ply as i32 {
+                let state = &board.states[ply as usize];
+                if state.zobrist_hash == board.zobrist_hash {
+                    count += 1;
+                }
+                ply -= 2;
+            }
+            let is_draw = (count == 2) || (count == 1 && board.ply > self.root_ply + 2);
+            if is_draw {
+                return 0;
+            }
+        }
+
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
             if entry.hash == board.zobrist_hash && entry.depth >= depth {
                 self.result.transpositions += 1;
@@ -195,7 +221,6 @@ impl Search {
                 }
             }
         }
-
         // Leaf node evaluation
         if depth == 0 {
             return self.quiescence_search(board, alpha, beta, ply + 1);
@@ -287,6 +312,26 @@ impl Search {
         }
 
         self.result.nodes += 1;
+
+        if board.state().halfmove_clock >= 100 {
+            return 0;
+        }
+
+        if board.ply - board.state().last_irreversible_ply >= 4 {
+            let mut ply = (board.ply - 2) as i32;
+            let mut count = 0;
+            while ply >= board.state().last_irreversible_ply as i32 {
+                let state = &board.states[ply as usize];
+                if state.zobrist_hash == board.zobrist_hash {
+                    count += 1;
+                }
+                ply -= 2;
+            }
+            let is_draw = (count == 2) || (count == 1 && board.ply > self.root_ply + 2);
+            if is_draw {
+                return 0;
+            }
+        }
 
         let stand_pat = evaluate(board);
         if stand_pat >= beta {

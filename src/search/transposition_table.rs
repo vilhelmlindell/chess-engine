@@ -1,6 +1,6 @@
 use crate::board::piece_move::Move;
 
-pub const TABLE_SIZE: usize = u64::pow(2, 24) as usize - 1;
+pub const TABLE_SIZE: usize = u64::pow(2, 20) as usize - 1;
 
 #[derive(Clone)]
 pub struct TranspositionTable {
@@ -20,6 +20,15 @@ impl TranspositionTable {
 
     pub fn clear(&mut self) {
         *self.table = [None; TABLE_SIZE]
+    }
+
+    pub fn filled_count(&self) -> usize {
+        self.table.iter().filter(|entry| entry.is_some()).count()
+    }
+
+    pub fn filled_percentage(&self) -> f64 {
+        let filled = self.filled_count();
+        (filled as f64 / TABLE_SIZE as f64) * 100.0
     }
 
     fn get_index(&self, hash: u64) -> usize {

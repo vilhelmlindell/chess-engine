@@ -17,6 +17,6 @@ rusttype = "0.9.3"
 ab_glyph = "0.2.29"
 
 [profile.release]
-debug = true
+#debug = true
 lto = "fat"
 opt-level = 3

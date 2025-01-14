@@ -1,7 +1,7 @@
 use super::bitboard::Bitboard;
 use super::direction::Direction;
 use super::piece::{Piece, PieceType};
-use super::piece_move::{Move, MoveType};
+use super::piece_move::{Move, MoveType, Square};
 use super::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
 use crate::evaluation::piece_square_tables::{endgame_position_value, midgame_position_value};
 use crate::move_generation::attack_tables::*;
@@ -53,6 +53,7 @@ pub struct Board {
     pub transposition_table: TranspositionTable,
     pub zobrist_hash: u64,
     pub opening_move_count: u32,
+    pub ply: u32,
 }
 
 impl Board {
@@ -239,12 +240,18 @@ impl Board {
         }
 
         let castling_rights_bits_after = Self::castling_rights_bits(state.castling_rights);
-
         self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
 
         if let Some(captured_piece) = self.squares[mov.to()] {
             self.clear_square(mov.to());
             state.captured_piece = Some(captured_piece);
+            state.halfmove_clock = 0;
+            state.last_irreversible_ply = self.ply;
+        }
+
+        if self.squares[mov.from()].expect("Invalid move: no piece on from square").piece_type() == PieceType::Pawn {
+            state.halfmove_clock = 0;
+            state.last_irreversible_ply = self.ply;
         }
 
         if let Some(prev_en_passant_square) = self.state().en_passant_square {
@@ -257,10 +264,12 @@ impl Board {
         match mov.move_type() {
             MoveType::Normal => {}
             MoveType::KingsideCastle => {
+                state.last_irreversible_ply = self.ply;
                 let (rook_from, rook_to) = if self.side == Side::White { (63, 61) } else { (7, 5) };
                 self.move_piece(rook_from, rook_to);
             }
             MoveType::QueensideCastle => {
+                state.last_irreversible_ply = self.ply;
                 let (rook_from, rook_to) = if self.side == Side::White { (56, 59) } else { (0, 3) };
                 self.move_piece(rook_from, rook_to);
             }
@@ -288,12 +297,12 @@ impl Board {
         self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
         self.absolute_pinned_squares = self.absolute_pins();
 
-        if self.states.len() % 1000 == 0 {
-            //println!("Len: {}", self.states.len());
-        }
+        state.halfmove_clock += 1;
+        self.ply += 1;
         self.states.push(state);
     }
     pub fn unmake_move(&mut self, mov: Move) {
+        self.ply -= 1;
         self.side = self.side.enemy();
         self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
 
@@ -519,6 +528,7 @@ impl Default for Board {
             transposition_table: TranspositionTable::default(),
             zobrist_hash: 0,
             opening_move_count: 0,
+            ply: 0,
         }
     }
 }
@@ -599,12 +609,13 @@ impl<T, const N: usize> IndexMut<Side> for [T; N] {
 #[derive(Clone, Copy)]
 pub struct BoardState {
     // Copied
-    pub halfmove_clock: u32,
+    pub halfmove_clock: u8,
+    pub last_irreversible_ply: u32,
     pub zobrist_hash: u64,
 
     // Recalculated
     pub castling_rights: [CastlingRights; 2],
-    pub en_passant_square: Option<usize>,
+    pub en_passant_square: Option<Square>,
     pub captured_piece: Option<Piece>,
 }
 
@@ -613,6 +624,7 @@ impl BoardState {
         Self {
             halfmove_clock: state.halfmove_clock,
             castling_rights: state.castling_rights,
+            last_irreversible_ply: state.last_irreversible_ply,
             ..Self::default()
         }
     }
@@ -631,6 +643,8 @@ impl Default for BoardState {
             castling_rights: [CastlingRights { kingside: false, queenside: false }, CastlingRights { kingside: false, queenside: false }],
             en_passant_square: None,
             captured_piece: None,
+            last_irreversible_ply: 0,
+            zobrist_hash: 0,
         }
     }
 }
