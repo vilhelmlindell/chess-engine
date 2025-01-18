@@ -118,7 +118,7 @@ impl Uci {
         println!("id name vilhelm lindell");
         println!("uciok");
     }
-    fn register(&self, command: String) {
+    //fn register(&self, command: String) {
         //let words = command.split_whitespace();
         //words.next();
         //while let token = words.next() {
@@ -127,7 +127,7 @@ impl Uci {
         //        ""
         //    }
         //}
-    }
+    //}
     fn set_debug(&mut self, command: String) {
         if command.ends_with("on") {
             self.is_debug = true;
