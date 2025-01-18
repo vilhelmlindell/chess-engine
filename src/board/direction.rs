@@ -1,5 +1,5 @@
-use std::{ops::{Index, IndexMut}, slice::SliceIndex};
-use num_enum::{TryFromPrimitive, UnsafeFromPrimitive};
+use std::ops::{Index, IndexMut};
+use num_enum::{UnsafeFromPrimitive};
 
 use crate::board::Side;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, UnsafeFromPrimitive)]

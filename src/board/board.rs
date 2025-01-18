@@ -54,6 +54,7 @@ pub struct Board {
     pub zobrist_hash: u64,
     pub opening_move_count: u32,
     pub ply: u32,
+    pub can_detect_threefold_repetition: bool,
 }
 
 impl Board {
@@ -128,11 +129,15 @@ impl Board {
         } else {
             fen.push('-');
         }
-        fen.push_str(" 0 1");
+        fen.push(' ');
+        fen.push_str(&self.state().halfmove_clock.to_string());
+        fen.push_str(&(self.ply / 2).to_string());
         fen
     }
     pub fn start_pos() -> Self {
-        Self::from_fen(STARTING_FEN)
+        let mut board = Self::from_fen(STARTING_FEN);
+        board.can_detect_threefold_repetition = true;
+        return board;
     }
 
     pub fn friendly_squares(&self) -> Bitboard {
@@ -206,6 +211,9 @@ impl Board {
             "-" => {}
             _ => self.state_mut().en_passant_square = Some(square_from_string(fields.get(3).unwrap())),
         }
+
+        self.state_mut().halfmove_clock = fields.get(4).unwrap().parse::<u8>().unwrap();
+        self.ply = fields.get(4).unwrap().parse::<u32>().unwrap() * 2 + self.side as u32;
 
         self.initialize_bitboards();
         for square in 0..64 {
@@ -353,6 +361,49 @@ impl Board {
         }
 
         self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
+    }
+    pub fn make_null_move(&mut self) {
+        let mut state = BoardState::from_state(self.state());
+
+        // Save the current en passant square, if any, to the state.
+        if let Some(prev_en_passant_square) = self.state().en_passant_square {
+            let prev_file = prev_en_passant_square % 8;
+            self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+        }
+
+        // Clear the en passant square, as no pawn move occurs in a null move.
+        state.en_passant_square = None;
+
+        // Toggle the side to move.
+        self.side = self.side.enemy();
+        self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
+
+        // Increment the halfmove clock, as no irreversible move occurs.
+        state.halfmove_clock += 1;
+
+        // Push the updated state to the state stack.
+        self.states.push(state);
+
+        // Increment the ply count.
+        self.ply += 1;
+    }
+
+    pub fn unmake_null_move(&mut self) {
+        // Decrement the ply count.
+        self.ply -= 1;
+
+        // Toggle the side to move back.
+        self.side = self.side.enemy();
+        self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
+
+        // Pop the previous state from the state stack.
+        self.states.pop();
+
+        // Restore the en passant square from the previous state, if it existed.
+        if let Some(prev_en_passant_square) = self.state().en_passant_square {
+            let prev_file = prev_en_passant_square % 8;
+            self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+        }
     }
     #[inline(always)]
     pub fn attacked(&self, square: usize) -> bool {
@@ -529,6 +580,7 @@ impl Default for Board {
             zobrist_hash: 0,
             opening_move_count: 0,
             ply: 0,
+            can_detect_threefold_repetition: false,
         }
     }
 }

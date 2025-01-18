@@ -6,12 +6,20 @@ use std::thread::{self, spawn, JoinHandle};
 use std::time::Instant;
 use std::sync::mpsc;
 
+use chess_engine::bench;
 use chess_engine::board::{Board, Side};
 use chess_engine::move_generation::generate_moves;
 use chess_engine::perft::perft;
 use chess_engine::search::{Search, SearchMode, SearchParams, SearchResult};
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(arg) = args.get(1) {
+        if arg == "bench" {
+            bench::bench();
+        }
+        return;
+    }
     Uci::start();
 }
 
@@ -70,7 +78,13 @@ impl Uci {
         if let Some(handle) = self.search_thread.take() {
             if handle.is_finished() {
                 match handle.join() {
-                    Ok(result) => self.print_search_result(result),
+                    Ok(result) => {
+                        if let Some(mov) = result.pv.first() {
+                            println!("bestmove {}", mov);
+                        } else {
+                            println!("bestmove (none)");
+                        }
+                    },
                     Err(e) => eprintln!("Search thread panicked: {:?}", e),
                 }
             } else {
@@ -78,24 +92,6 @@ impl Uci {
                 self.search_thread = Some(handle);
             }
         }
-    }
-
-    fn print_search_result(&self, result: SearchResult) {
-        // Print the search result information
-        print!(
-            "info depth {} score cp {} time {} nodes {} nps {} ",
-            result.depth_reached,
-            result.highest_eval,
-            result.time,
-            result.nodes,
-            if result.time > 0 { result.nodes * 1000 / result.time } else { 0 }
-        );
-        print!("pv");
-        for mov in &result.pv {
-            print!(" {}", mov);
-        }
-        println!();
-        println!("bestmove {}", result.pv.first().expect("No best move found"));
     }
 
     fn parse_command(&mut self, full_command: String) {

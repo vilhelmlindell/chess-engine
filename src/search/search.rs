@@ -9,8 +9,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
 
-use super::book_moves::get_book_move;
-
 pub const MAX_DEPTH: usize = 100;
 pub const KILLER_MOVE_SLOTS: usize = 3;
 
@@ -22,7 +20,7 @@ const MAX_EVAL: i32 = 100000000;
 
 #[derive(PartialEq, Copy, Clone, Default)]
 pub struct SearchParams {
-    //pub depth: i8,               // Maximum depth to search to
+    pub depth: Option<u32>, // Maximum depth to search to
     //pub nodes: usize,            // Maximum number of nodes to search
     pub move_time: u128, // Maximum time per move to search
     pub clock: Clock,    // Time available for entire game
@@ -42,8 +40,16 @@ pub struct Search {
 }
 
 impl Search {
-    pub fn should_quit(&self) -> bool {
-        return self.should_quit.load(std::sync::atomic::Ordering::Relaxed) | (self.start_time.elapsed().as_millis() > self.max_time);
+    pub fn should_quit(&self, ply: u32) -> bool {
+        if self.start_time.elapsed().as_millis() > self.max_time {
+            return true;
+        }
+        if let Some(max_depth) = self.params.depth {
+            if ply > max_depth {
+                return true;
+            }
+        }
+        return self.should_quit.load(std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -75,7 +81,7 @@ pub struct SearchResult {
     pub depth_reached: u32,
     pub nodes: u32,
     pub transpositions: u32,
-    pub time: u32,
+    pub time: u128,
 }
 
 impl Default for Search {
@@ -97,13 +103,14 @@ impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
 
-        if let Some(book_move) = get_book_move(board, 1.0) {
-            self.result.pv.push(book_move);
-            return self.result.clone();
-        }
+        //if let Some(book_move) = get_book_move(board, 1.0) {
+        //    self.result.pv.push(book_move);
+        //    return self.result.clone();
+        //}
 
         self.params = search_params;
         self.pv.clear();
+        board.transposition_table.clear();
         self.result = SearchResult::default();
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
@@ -128,56 +135,27 @@ impl Search {
         //board.transposition_table.clear();
 
         for depth in 1..=MAX_DEPTH as u32 {
-            self.result.nodes = 0;
+            if self.should_quit(depth) {
+                break;
+            }
 
             let alpha = -MAX_EVAL;
             let beta = MAX_EVAL;
 
             let eval = self.pvs(board, depth, alpha, beta, 0);
 
-            // We quit immediately since an interrupted search will be not that useful
-            if self.should_quit() {
-                break;
-            }
-
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
             self.result.pv = self.extract_pv(depth, board);
-            self.result.time = self.start_time.elapsed().as_millis() as u32;
+            self.result.time = self.start_time.elapsed().as_millis();
             Search::print_info(&self.result);
         }
 
         self.result.clone()
     }
 
-    fn print_info(result: &SearchResult) {
-        println!(
-            "info depth {} score cp {} time {} nodes {} nps {} ",
-            result.depth_reached,
-            result.highest_eval,
-            result.time,
-            result.nodes,
-            (result.nodes as f32 / result.time as f32 * 1000.0) as u32
-        );
-    }
-
-    fn calculate_time(&mut self, board: &Board) -> u128 {
-        let half_moves_left = Search::remaining_half_moves(board.total_material) as u128;
-        let time_left = self.params.clock.time[board.side] + self.params.clock.inc[board.side] * half_moves_left / 2;
-        time_left / half_moves_left
-    }
-    // Approximation for amount of half moves remaining
-    // See: http://facta.junis.ni.ac.rs/acar/acar200901/acar2009-07.pdf for more info
-    fn remaining_half_moves(material: u32) -> u32 {
-        match material {
-            0..20 => material + 10,
-            20..=60 => 3 * material / 8 + 22,
-            61.. => 5 * material / 4 - 30,
-        }
-    }
-
     fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
-        if self.should_quit() {
+        if self.should_quit(depth) {
             return alpha;
         }
 
@@ -187,19 +165,22 @@ impl Search {
             return 0;
         }
 
-        if board.ply - board.state().last_irreversible_ply >= 4 {
-            let mut ply = (board.ply - 2) as i32;
-            let mut count = 0;
-            while ply >= board.state().last_irreversible_ply as i32 {
-                let state = &board.states[ply as usize];
-                if state.zobrist_hash == board.zobrist_hash {
-                    count += 1;
+        // TODO: Make this const generic
+        if board.can_detect_threefold_repetition {
+            if board.ply - board.state().last_irreversible_ply >= 4 {
+                let mut ply = (board.ply - 2) as i32;
+                let mut count = 0;
+                while ply >= board.state().last_irreversible_ply as i32 {
+                    let state = &board.states[board.ply as usize];
+                    if state.zobrist_hash == board.zobrist_hash {
+                        count += 1;
+                    }
+                    ply -= 2;
                 }
-                ply -= 2;
-            }
-            let is_draw = (count == 2) || (count == 1 && board.ply > self.root_ply + 2);
-            if is_draw {
-                return 0;
+                let is_draw = (count == 2) || (count == 1 && board.ply > self.root_ply + 2);
+                if is_draw {
+                    return 0;
+                }
             }
         }
 
@@ -223,7 +204,19 @@ impl Search {
         }
         // Leaf node evaluation
         if depth == 0 {
-            return self.quiescence_search(board, alpha, beta, ply + 1);
+            //return evaluate(board);
+            return self.quiescence_search(board, alpha, beta, ply);
+        }
+
+        let do_nmp = false;
+        if do_nmp {
+            let nmp_reduction = 4;
+            board.make_null_move();
+            let eval = -self.pvs(board, depth - nmp_reduction, -(beta - 1), -alpha, ply + 1);
+            board.unmake_null_move();
+            if eval >= beta {
+                return eval;
+            }
         }
 
         let mut moves = generate_moves(board);
@@ -307,29 +300,28 @@ impl Search {
     }
 
     fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
-        if self.should_quit() {
-            return alpha;
-        }
-
         self.result.nodes += 1;
 
         if board.state().halfmove_clock >= 100 {
             return 0;
         }
 
-        if board.ply - board.state().last_irreversible_ply >= 4 {
-            let mut ply = (board.ply - 2) as i32;
-            let mut count = 0;
-            while ply >= board.state().last_irreversible_ply as i32 {
-                let state = &board.states[ply as usize];
-                if state.zobrist_hash == board.zobrist_hash {
-                    count += 1;
+        // TODO: Make this const generic
+        if board.can_detect_threefold_repetition {
+            if board.ply - board.state().last_irreversible_ply >= 4 {
+                let mut ply = (board.ply - 2) as i32;
+                let mut count = 0;
+                while ply >= board.state().last_irreversible_ply as i32 {
+                    let state = &board.states[ply as usize];
+                    if state.zobrist_hash == board.zobrist_hash {
+                        count += 1;
+                    }
+                    ply -= 2;
                 }
-                ply -= 2;
-            }
-            let is_draw = (count == 2) || (count == 1 && board.ply > self.root_ply + 2);
-            if is_draw {
-                return 0;
+                let is_draw = (count == 2) || (count == 1 && board.ply > self.root_ply + 2);
+                if is_draw {
+                    return 0;
+                }
             }
         }
 
@@ -339,6 +331,10 @@ impl Search {
         }
         if alpha < stand_pat {
             alpha = stand_pat;
+        }
+
+        if self.should_quit(ply) {
+            return alpha;
         }
 
         let moves = generate_moves(board);
@@ -352,17 +348,19 @@ impl Search {
         }
 
         for mov in moves {
-            if board.is_capture(mov) {
-                board.make_move(mov);
-                let eval = -self.quiescence_search(board, -beta, -alpha, ply + 1);
-                board.unmake_move(mov);
+            if !board.is_capture(mov) {
+                continue;
+            }
 
-                if eval >= beta {
-                    return beta;
-                }
-                if eval > alpha {
-                    alpha = eval;
-                }
+            board.make_move(mov);
+            let eval = -self.quiescence_search(board, -beta, -alpha, ply + 1);
+            board.unmake_move(mov);
+
+            if eval >= beta {
+                return beta;
+            }
+            if eval > alpha {
+                alpha = eval;
             }
         }
         alpha
@@ -402,6 +400,8 @@ impl Search {
         self.get_move_score(b, board, ply).cmp(&self.get_move_score(a, board, ply))
     }
 
+    // TODO: Just realized this is incredibly inefficient, get_move_score is slow already and is
+    // being called multiple times on the same move in the same sort.
     fn get_move_score(&self, mov: Move, board: &Board, ply: u32) -> i32 {
         if let Some(pv_mov) = self.pv.get(ply as usize) {
             if mov == *pv_mov {
@@ -415,13 +415,7 @@ impl Search {
             let moving_piece = board.squares[mov.from()].unwrap();
             let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
             score += CAPTURE_BASE_SCORE + capture_score;
-        }
-        if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-            if entry.best_move == mov {
-                score += HASH_MOVE_SCORE;
-            }
-        }
-        if !board.is_capture(mov) {
+        } else {
             for killer_move in &self.killer_moves[ply as usize] {
                 if let Some(killer) = killer_move {
                     if mov == *killer {
@@ -429,6 +423,11 @@ impl Search {
                         break;
                     }
                 }
+            }
+        }
+        if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+            if entry.best_move == mov {
+                score += HASH_MOVE_SCORE;
             }
         }
         score
@@ -440,5 +439,36 @@ impl Search {
             self.killer_moves[ply].rotate_right(1);
             self.killer_moves[ply][0] = Some(mov);
         }
+    }
+
+    fn calculate_time(&mut self, board: &Board) -> u128 {
+        let half_moves_left = Search::remaining_half_moves(board.total_material) as u128;
+        let time_left = self.params.clock.time[board.side] + self.params.clock.inc[board.side] * half_moves_left / 2;
+        time_left / half_moves_left
+    }
+
+    // Approximation for amount of half moves remaining
+    // See: http://facta.junis.ni.ac.rs/acar/acar200901/acar2009-07.pdf for more info
+    fn remaining_half_moves(material: u32) -> u32 {
+        match material {
+            0..20 => material + 10,
+            20..=60 => 3 * material / 8 + 22,
+            61.. => 5 * material / 4 - 30,
+        }
+    }
+
+    pub fn print_info(result: &SearchResult) {
+        print!(
+            "info depth {} score cp {} time {} nodes {} nps {} pv ",
+            result.depth_reached,
+            result.highest_eval,
+            result.time,
+            result.nodes,
+            (result.nodes as f32 / result.time as f32 * 1000.0) as u32
+        );
+        for mov in result.pv.iter() {
+            print!("{} ", mov);
+        }
+        println!();
     }
 }
