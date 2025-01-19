@@ -11,7 +11,7 @@ pub fn evaluate(board: &Board) -> i32 {
     let mut eval = (board.material_balance * board.side.factor()) as f32;
     eval += ((board.midgame_position_balance * board.side.factor()) as f32) * phase;
     eval += ((board.endgame_position_balance * board.side.factor()) as f32) * (1.0 - phase);
-    eval += corner_king_evaluation(board) as f32 * (1.0 - phase*phase) * 10.0;
+    eval += corner_king_evaluation(board) as f32 * (1.0 - phase)*(1.0 - phase) * 10.0;
     //println!("corner_king: {}", corner_king_evaluation(board) as f32 * (1.0 - phase) * 10.0);
     eval as i32
 }
