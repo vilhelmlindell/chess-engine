@@ -22,6 +22,7 @@ pub const RANK_6: Bitboard = Bitboard(0x0000000000FF0000);
 pub const RANK_7: Bitboard = Bitboard(0x000000000000FF00);
 pub const RANK_8: Bitboard = Bitboard(0x00000000000000FF);
 pub const RANKS: [Bitboard; 8] = [RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8];
+pub const TOTAL_MATERIAL_STARTPOS: u32 = 16 * PieceType::Pawn.standard_value() + 4 * PieceType::Knight.standard_value() + 4 * PieceType::Bishop.standard_value() + 4 * PieceType::Rook.standard_value() + 2 * PieceType::Queen.standard_value();
 
 const BLACK_QUEENSIDE_START_MASK: Bitboard = Bitboard((1 << 0) | (1 << 4)); // a8 and e8
 const BLACK_KINGSIDE_START_MASK: Bitboard = Bitboard((1 << 7) | (1 << 4)); // h8 and e8

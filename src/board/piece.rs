@@ -73,7 +73,7 @@ impl PieceType {
             PieceType::King => 20000,
         }
     }
-    pub fn standard_value(&self) -> u32 {
+    pub const fn standard_value(&self) -> u32 {
         match self {
             PieceType::Pawn => 1,
             PieceType::Knight => 3,
