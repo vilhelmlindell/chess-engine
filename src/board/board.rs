@@ -305,7 +305,9 @@ impl Board {
         self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
         self.absolute_pinned_squares = self.absolute_pins();
 
-        state.halfmove_clock += 1;
+        if self.state().halfmove_clock != 0 {
+            state.halfmove_clock += 1;
+        }
         self.ply += 1;
         self.states.push(state);
     }

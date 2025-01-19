@@ -3,6 +3,7 @@ use crate::board::piece_move::Move;
 use crate::board::Board;
 use crate::evaluation::evaluate;
 use crate::move_generation::generate_moves;
+use crate::search::book_moves::get_book_move;
 use crate::search::transposition_table::{NodeType, TranspositionEntry};
 use std::cmp::Ordering;
 use std::sync::atomic::AtomicBool;
@@ -103,10 +104,10 @@ impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
 
-        //if let Some(book_move) = get_book_move(board, 1.0) {
-        //    self.result.pv.push(book_move);
-        //    return self.result.clone();
-        //}
+        if let Some(book_move) = get_book_move(board, 1.0) {
+            self.result.pv.push(book_move);
+            return self.result.clone();
+        }
 
         self.params = search_params;
         self.pv.clear();
