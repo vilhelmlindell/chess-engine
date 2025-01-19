@@ -393,11 +393,7 @@ impl Search {
     }
 
     pub fn order_moves(&self, board: &Board, moves: &mut [Move], ply: u32) {
-        moves.sort_by(|a, b| self.compare_moves(*a, *b, board, ply));
-    }
-
-    fn compare_moves(&self, a: Move, b: Move, board: &Board, ply: u32) -> Ordering {
-        self.get_move_score(b, board, ply).cmp(&self.get_move_score(a, board, ply))
+        moves.sort_by_cached_key(|mov| -self.get_move_score(*mov, board, ply));
     }
 
     // TODO: Just realized this is incredibly inefficient, get_move_score is slow already and is
