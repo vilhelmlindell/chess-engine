@@ -337,7 +337,7 @@ impl Search {
             return alpha;
         }
 
-        let moves = generate_moves(board);
+        let mut moves = generate_moves(board);
         if moves.is_empty() {
             let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
             return if board.attacked(king_square) {
@@ -346,12 +346,10 @@ impl Search {
                 0 // Stalemate
             };
         }
+        moves.retain(|mov| board.is_capture(*mov));
+        self.order_moves(board, &mut moves, ply);
 
         for mov in moves {
-            if !board.is_capture(mov) {
-                continue;
-            }
-
             board.make_move(mov);
             let eval = -self.quiescence_search(board, -beta, -alpha, ply + 1);
             board.unmake_move(mov);
