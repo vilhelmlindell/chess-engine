@@ -37,6 +37,7 @@ pub struct Search {
     pub pv: Vec<Move>,
     pub should_quit: Arc<AtomicBool>, // Shared atomic flag
     pub root_ply: u32,
+    pub pv_table: [[Option<Move>; MAX_DEPTH]; MAX_DEPTH],
     start_time: Instant,
 }
 
@@ -96,6 +97,7 @@ impl Default for Search {
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             pv: Vec::with_capacity(MAX_DEPTH),
             should_quit: Arc::new(AtomicBool::new(false)),
+            pv_table: [[None; MAX_DEPTH]; MAX_DEPTH],
         }
     }
 }
@@ -135,10 +137,6 @@ impl Search {
         //board.transposition_table.clear();
 
         for depth in 1..=MAX_DEPTH as u32 {
-            if self.should_quit(depth) {
-                break;
-            }
-
             let alpha = -MAX_EVAL;
             let beta = MAX_EVAL;
 
@@ -149,6 +147,11 @@ impl Search {
             self.result.pv = self.extract_pv(depth, board);
             self.result.time = self.start_time.elapsed().as_millis();
             Search::print_info(&self.result);
+
+            if self.should_quit(depth) {
+                println!("len: {}", self.result.pv.len());
+                break;
+            }
         }
 
         self.result.clone()
@@ -156,7 +159,7 @@ impl Search {
 
     fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
         if self.should_quit(depth) {
-            return evaluate(board);
+            return 0;
         }
 
         self.result.nodes += 1;
@@ -204,8 +207,7 @@ impl Search {
         }
         // Leaf node evaluation
         if depth == 0 {
-            return evaluate(board);
-            //return self.quiescence_search(board, alpha, beta, ply);
+            return self.quiescence_search(board, alpha, beta, ply);
         }
 
         //let do_nmp = false;
@@ -252,6 +254,12 @@ impl Search {
             evaluation_bound = NodeType::Exact;
             best_move = Some(first_move);
             alpha = score;
+            unsafe {
+                let len = self.pv_table[ply as usize][1..].len();
+                let src = &self.pv_table[ply as usize + 1][0..len] as *const _;
+                self.pv_table[ply as usize][0] = best_move;
+                self.pv_table[ply as usize][1..].copy_from_slice(&*src);
+            }
         }
 
         // Search remaining moves with zero window
@@ -272,6 +280,10 @@ impl Search {
 
             board.unmake_move(mov);
 
+            if self.should_quit(depth) {
+                return 0;
+            }
+
             if score >= beta {
                 // Move is too good, the opponent has better option
                 let entry = TranspositionEntry::new(depth, beta, mov, NodeType::LowerBound, board.zobrist_hash);
@@ -279,6 +291,7 @@ impl Search {
                 if !board.is_capture(mov) {
                     self.update_killer_moves(mov, ply);
                 }
+                self.pv_table[ply as usize];
                 return beta;
             }
 
@@ -287,6 +300,13 @@ impl Search {
                 evaluation_bound = NodeType::Exact;
                 best_move = Some(mov);
                 alpha = score;
+
+                unsafe {
+                    let len = self.pv_table[ply as usize][1..].len();
+                    let src = &self.pv_table[ply as usize + 1][0..len] as *const _;
+                    self.pv_table[ply as usize][0] = best_move;
+                    self.pv_table[ply as usize][1..].copy_from_slice(&*src);
+                }
             }
         }
 
@@ -300,6 +320,10 @@ impl Search {
     }
 
     fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
+        if self.should_quit(ply) {
+            return 0;
+        }
+
         self.result.nodes += 1;
 
         if board.state().halfmove_clock >= 100 {
@@ -333,10 +357,6 @@ impl Search {
             alpha = stand_pat;
         }
 
-        if self.should_quit(ply) {
-            return evaluate(board);
-        }
-
         let mut moves = generate_moves(board);
         if moves.is_empty() {
             let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
@@ -365,28 +385,25 @@ impl Search {
     }
 
     pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
-        let mut current_hash = board.zobrist_hash;
+        let mut current_ply = 0;
         let mut pv = Vec::new();
-        let mut i = 0;
 
-        while let Some(entry) = board.transposition_table.probe(current_hash) {
-            if entry.hash != current_hash || i >= depth {
+        while current_ply < depth {
+            if let Some(mv) = self.pv_table[current_ply as usize][0] {
+                pv.push(mv);
+
+                board.make_move(mv);
+            } else {
                 break;
             }
 
-            let pv_move = entry.best_move;
-            pv.push(pv_move);
-
-            // Make the move on the board to get the next position
-            board.make_move(pv_move);
-            current_hash = board.zobrist_hash;
-            i += 1;
+            current_ply += 1;
         }
 
-        // Unmake all the moves to restore the original board state
         for &mov in pv.iter().rev() {
             board.unmake_move(mov);
         }
+
         pv
     }
 
