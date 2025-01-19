@@ -111,7 +111,6 @@ impl Search {
 
         self.params = search_params;
         self.pv.clear();
-        board.transposition_table.clear();
         self.result = SearchResult::default();
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();

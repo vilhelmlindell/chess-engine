@@ -98,5 +98,4 @@ pub fn bench() {
     }
     let nps = (total_nodes as f32 / (total_time as f32 / 1000.0)) as u128;
     println!("{} nodes / {}s := {} nps", total_nodes, (total_time as f32 / 1000.0), nps);
-    println!("10679131 nodes");
 }

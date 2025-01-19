@@ -15,6 +15,7 @@ image = "0.25.4"
 imageproc = "0.25.0"
 rusttype = "0.9.3"
 ab_glyph = "0.2.29"
+rand_chacha = "0.3.1"
 
 [profile.release]
 #debug = true
