@@ -156,7 +156,7 @@ impl Search {
 
     fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
         if self.should_quit(depth) {
-            return alpha;
+            return evaluate(board);
         }
 
         self.result.nodes += 1;
@@ -204,8 +204,8 @@ impl Search {
         }
         // Leaf node evaluation
         if depth == 0 {
-            //return evaluate(board);
-            return self.quiescence_search(board, alpha, beta, ply);
+            return evaluate(board);
+            //return self.quiescence_search(board, alpha, beta, ply);
         }
 
         //let do_nmp = false;
@@ -334,7 +334,7 @@ impl Search {
         }
 
         if self.should_quit(ply) {
-            return alpha;
+            return evaluate(board);
         }
 
         let mut moves = generate_moves(board);
