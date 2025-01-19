@@ -209,16 +209,16 @@ impl Search {
             return self.quiescence_search(board, alpha, beta, ply);
         }
 
-        let do_nmp = false;
-        if do_nmp {
-            let nmp_reduction = 4;
-            board.make_null_move();
-            let eval = -self.pvs(board, depth - nmp_reduction, -(beta - 1), -alpha, ply + 1);
-            board.unmake_null_move();
-            if eval >= beta {
-                return eval;
-            }
-        }
+        //let do_nmp = false;
+        //if do_nmp {
+        //    let nmp_reduction = 4;
+        //    board.make_null_move();
+        //    let eval = -self.pvs(board, depth - nmp_reduction, -(beta - 1), -alpha, ply + 1);
+        //    board.unmake_null_move();
+        //    if eval >= beta {
+        //        return eval;
+        //    }
+        //}
 
         let mut moves = generate_moves(board);
         self.order_moves(board, &mut moves, ply);
