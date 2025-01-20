@@ -6,6 +6,7 @@ use crate::move_generation::generate_moves;
 use crate::search::book_moves::get_book_move;
 use crate::search::transposition_table::{NodeType, TranspositionEntry};
 use std::cmp::Ordering;
+use std::i32;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
@@ -37,6 +38,7 @@ pub struct Search {
     pub pv: Vec<Move>,
     pub should_quit: Arc<AtomicBool>, // Shared atomic flag
     pub root_ply: u32,
+    pub has_searched_one_move: bool,
     start_time: Instant,
 }
 
@@ -96,6 +98,7 @@ impl Default for Search {
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             pv: Vec::with_capacity(MAX_DEPTH),
             should_quit: Arc::new(AtomicBool::new(false)),
+            has_searched_one_move: false,
         }
     }
 }
@@ -111,7 +114,6 @@ impl Search {
 
         self.params = search_params;
         self.pv.clear();
-        self.result = SearchResult::default();
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
         self.root_ply = board.ply;
@@ -134,15 +136,18 @@ impl Search {
 
         //board.transposition_table.clear();
 
+
+        //let mut old_result = SearchResult::default();
         for depth in 1..=MAX_DEPTH as u32 {
             if self.should_quit(depth) {
                 break;
             }
 
-            let alpha = -MAX_EVAL;
-            let beta = MAX_EVAL;
+            self.has_searched_one_move = false;
 
-            let eval = self.pvs(board, depth, alpha, beta, 0);
+            //old_result = self.result.clone();
+
+            let eval = self.pvs(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
@@ -150,16 +155,35 @@ impl Search {
             self.result.time = self.start_time.elapsed().as_millis();
             Search::print_info(&self.result);
         }
-
         self.result.clone()
     }
 
+    // Principal variation search using fail-soft alpha beta search
     fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
         if self.should_quit(depth) {
-            return evaluate(board);
+            return 0;
         }
 
         self.result.nodes += 1;
+
+        if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+            if entry.hash == board.zobrist_hash && entry.depth >= depth {
+                self.result.transpositions += 1;
+                match entry.node_type {
+                    NodeType::Exact => return entry.eval,
+                    NodeType::LowerBound => {
+                        if entry.eval <= alpha {
+                            return entry.eval;
+                        }
+                    }
+                    NodeType::UpperBound => {
+                        if entry.eval >= beta {
+                            return entry.eval;
+                        }
+                    }
+                }
+            }
+        }
 
         if board.state().halfmove_clock >= 100 {
             return 0;
@@ -184,43 +208,12 @@ impl Search {
             }
         }
 
-        if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-            if entry.hash == board.zobrist_hash && entry.depth >= depth {
-                self.result.transpositions += 1;
-                match entry.node_type {
-                    NodeType::Exact => return entry.eval,
-                    NodeType::LowerBound => {
-                        if entry.eval <= alpha {
-                            return entry.eval;
-                        }
-                    }
-                    NodeType::UpperBound => {
-                        if entry.eval >= beta {
-                            return entry.eval;
-                        }
-                    }
-                }
-            }
-        }
-        // Leaf node evaluation
+        // Leaf node reached, so we run quiescence search
         if depth == 0 {
-            return evaluate(board);
-            //return self.quiescence_search(board, alpha, beta, ply);
+            return self.quiescence_search(board, alpha, beta, ply);
         }
-
-        //let do_nmp = false;
-        //if do_nmp {
-        //    let nmp_reduction = 4;
-        //    board.make_null_move();
-        //    let eval = -self.pvs(board, depth - nmp_reduction, -(beta - 1), -alpha, ply + 1);
-        //    board.unmake_null_move();
-        //    if eval >= beta {
-        //        return eval;
-        //    }
-        //}
 
         let mut moves = generate_moves(board);
-        self.order_moves(board, &mut moves, ply);
 
         // Check for terminal positions
         if moves.is_empty() {
@@ -232,74 +225,72 @@ impl Search {
             };
         }
 
+        self.order_moves::<false>(board, &mut moves, ply);
+
         let mut best_move: Option<Move> = None;
         let mut evaluation_bound = NodeType::UpperBound;
-
-        let first_move = moves[0];
-        board.make_move(first_move);
-        let score = -self.pvs(board, depth - 1, -beta, -alpha, ply + 1);
-        board.unmake_move(first_move);
-
-        if score > alpha {
-            if score >= beta {
-                let entry = TranspositionEntry::new(depth, beta, first_move, NodeType::LowerBound, board.zobrist_hash);
-                board.transposition_table.store(entry);
-                if !board.is_capture(first_move) {
-                    self.update_killer_moves(first_move, ply);
-                }
-                return beta;
-            }
-            evaluation_bound = NodeType::Exact;
-            best_move = Some(first_move);
-            alpha = score;
-        }
+        let mut best_eval = i32::MIN;
 
         // Search remaining moves with zero window
-        for mov in moves.into_iter().skip(1) {
-            if alpha >= beta {
+        for (i, mov) in moves.iter().enumerate() {
+            board.make_move(*mov);
+
+            let eval = if i == 0 {
+                // The first move is searched normally
+                -self.pvs(board, depth - 1, -beta, -alpha, ply + 1)
+            } else {
+                // Try null-window search first
+                let mut eval = -self.pvs(board, depth - 1, -alpha - 1, -alpha, ply + 1);
+
+                // If the null-window search failed high, do a full re-search
+                if eval > alpha && eval < beta {
+                    eval = -self.pvs(board, depth - 1, -beta, -alpha, ply + 1);
+                }
+
+                eval
+            };
+
+            board.unmake_move(*mov);
+
+            if ply == 0 {
+                self.has_searched_one_move = true;
+            }
+
+            if eval > best_eval {
+                best_eval = eval;
+                best_move = Some(*mov);
+
+                if eval > alpha {
+                    // We found a move better than alpha and update alpha
+                    evaluation_bound = NodeType::Exact;
+                    alpha = eval;
+                }
+            }
+
+            if eval >= beta {
+                // Fail soft beta-cutoff: move is too good so the opponent refutes this line, we
+                // therefore exit
+                evaluation_bound = NodeType::LowerBound;
+
+                // Killer Move is a quiet move which caused a beta-cutoff in a sibling Cut-node(LowerBound-node), or any other earlier branch in the tree with the same ply distance to the root
+                if !board.is_capture(*mov) {
+                    self.update_killer_moves(*mov, ply);
+                }
                 break;
             }
-
-            board.make_move(mov);
-
-            // Try null-window search first
-            let mut score = -self.pvs(board, depth - 1, -alpha - 1, -alpha, ply + 1);
-
-            // If the null-window search failed high, do a full re-search
-            if score > alpha && score < beta {
-                score = -self.pvs(board, depth - 1, -beta, -alpha, ply + 1);
-            }
-
-            board.unmake_move(mov);
-
-            if score >= beta {
-                // Move is too good, the opponent has better option
-                let entry = TranspositionEntry::new(depth, beta, mov, NodeType::LowerBound, board.zobrist_hash);
-                board.transposition_table.store(entry);
-                if !board.is_capture(mov) {
-                    self.update_killer_moves(mov, ply);
-                }
-                return beta;
-            }
-
-            if score > alpha {
-                // Move is within
-                evaluation_bound = NodeType::Exact;
-                best_move = Some(mov);
-                alpha = score;
-            }
         }
 
-        // Store position in transposition table
-        if let Some(mov) = best_move {
-            let entry = TranspositionEntry::new(depth, alpha, mov, evaluation_bound, board.zobrist_hash);
-            board.transposition_table.store(entry);
-        }
+        let entry = TranspositionEntry::new(depth, best_eval, best_move.unwrap(), evaluation_bound, board.zobrist_hash);
+        board.transposition_table.store(entry);
 
-        alpha
+        best_eval
     }
 
     fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
+        if self.should_quit(ply) {
+            return 0;
+        }
+
         self.result.nodes += 1;
 
         if board.state().halfmove_clock >= 100 {
@@ -329,12 +320,8 @@ impl Search {
         if stand_pat >= beta {
             return beta;
         }
-        if alpha < stand_pat {
+        if stand_pat > alpha {
             alpha = stand_pat;
-        }
-
-        if self.should_quit(ply) {
-            return evaluate(board);
         }
 
         let mut moves = generate_moves(board);
@@ -347,21 +334,32 @@ impl Search {
             };
         }
         moves.retain(|mov| board.is_capture(*mov));
-        self.order_moves(board, &mut moves, ply);
+        self.order_moves::<true>(board, &mut moves, ply);
+
+        let mut best_eval = stand_pat;
 
         for mov in moves {
             board.make_move(mov);
             let eval = -self.quiescence_search(board, -beta, -alpha, ply + 1);
             board.unmake_move(mov);
 
-            if eval >= beta {
-                return beta;
+            if eval > best_eval {
+                best_eval = eval;
+
+                if eval > alpha {
+                    // We found a move better than alpha and update alpha
+                    alpha = eval;
+                }
             }
-            if eval > alpha {
-                alpha = eval;
+
+            if eval >= beta {
+                // Fail soft beta-cutoff: move is too good so the opponent refutes this line, we
+                // therefore exit
+                break;
             }
         }
-        alpha
+
+        return best_eval;
     }
 
     pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
@@ -390,13 +388,13 @@ impl Search {
         pv
     }
 
-    pub fn order_moves(&self, board: &Board, moves: &mut [Move], ply: u32) {
-        moves.sort_by_cached_key(|mov| -self.get_move_score(*mov, board, ply));
+    pub fn order_moves<const ONLY_CAPTURES: bool>(&self, board: &Board, moves: &mut [Move], ply: u32) {
+        moves.sort_by_cached_key(|mov| -self.get_move_score::<ONLY_CAPTURES>(*mov, board, ply));
     }
 
     // TODO: Just realized this is incredibly inefficient, get_move_score is slow already and is
     // being called multiple times on the same move in the same sort.
-    fn get_move_score(&self, mov: Move, board: &Board, ply: u32) -> i32 {
+    fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
         if let Some(pv_mov) = self.pv.get(ply as usize) {
             if mov == *pv_mov {
                 return i32::MAX;
@@ -404,7 +402,8 @@ impl Search {
         }
 
         let mut score = 0;
-        if board.is_capture(mov) {
+
+        if ONLY_CAPTURES || board.is_capture(mov) {
             let captured_piece = board.squares[mov.to()].unwrap();
             let moving_piece = board.squares[mov.from()].unwrap();
             let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
