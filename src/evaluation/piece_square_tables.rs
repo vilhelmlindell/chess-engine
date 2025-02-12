@@ -142,13 +142,25 @@ mod unformatted {
     pub fn midgame_position_value(piece_type: PieceType, square: usize, side: Side) -> i32 {
         match side {
             Side::White => MIDGAME_PIECE_SQUARE_TABLES[piece_type][square],
-            Side::Black => MIDGAME_PIECE_SQUARE_TABLES[piece_type][i32::abs(56 - square as i32) as usize]
+            Side::Black => {
+                let rank = square / 8;
+                let file = square % 8;
+                let actual_rank = 7 - rank;
+                let new_square = file + actual_rank * 8;
+                MIDGAME_PIECE_SQUARE_TABLES[piece_type][new_square as usize]
+          }
         }
     }
     pub fn endgame_position_value(piece_type: PieceType, square: usize, side: Side) -> i32 {
         match side {
             Side::White => ENDGAME_PIECE_SQUARE_TABLES[piece_type][square],
-            Side::Black => ENDGAME_PIECE_SQUARE_TABLES[piece_type][i32::abs(56 - square as i32) as usize]
+            Side::Black => {
+                let rank = square / 8;
+                let file = square % 8;
+                let actual_rank = 7 - rank;
+                let new_square = file + actual_rank * 8;
+                ENDGAME_PIECE_SQUARE_TABLES[piece_type][new_square as usize]
+            }
         }
     }
 }

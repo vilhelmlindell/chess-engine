@@ -14,13 +14,11 @@ use std::time::Instant;
 pub const MAX_DEPTH: usize = 100;
 pub const KILLER_MOVE_SLOTS: usize = 3;
 
-const HASH_MOVE_SCORE: i32 = 1200;
+const HASH_MOVE_SCORE: i32 = 4000;
 const CAPTURE_BASE_SCORE: i32 = 1000;
 const KILLER_MOVE_SCORE: i32 = 800;
 
-const MAX_EVAL: i32 = 100000;  // Reduced to avoid integer overflow issues
-const MATE_SCORE: i32 = 99000;
-const MATE_THRESHOLD: i32 = 98000;
+const MAX_EVAL: i32 = 100000;
 
 #[derive(PartialEq, Copy, Clone, Default)]
 pub struct SearchParams {
@@ -106,266 +104,11 @@ impl Default for Search {
 }
 
 impl Search {
-    //pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
-    //    self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
-
-    //    //if let Some(book_move) = get_book_move(board, 1.0) {
-    //    //    self.result.pv.push(book_move);
-    //    //    return self.result.clone();
-    //    //}
-
-    //    self.params = search_params;
-    //    self.pv.clear();
-    //    self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
-    //    self.start_time = Instant::now();
-    //    self.root_ply = board.ply;
-
-    //    // TODO: Add infinite mode as a const parameter to search instead of using u32::max_value
-    //    self.max_time = match search_params.search_mode {
-    //        SearchMode::Infinite => u128::max_value(),
-    //        SearchMode::MoveTime => search_params.move_time,
-    //        SearchMode::Clock => self.calculate_time(board),
-    //    };
-    //    println!("search time: {} ms", self.max_time);
-
-    //    //let vote_map = [0; 64 * 64];
-    //    //let available_threads: usize = thread::available_parallelism().unwrap().into();
-    //    //let mut threads = Vec::with_capacity(available_threads);
-
-    //    //for i in 0..available_threads {
-    //    //    threads.push(thread::spawn(move || {}));
-    //    //}
-
-    //    //board.transposition_table.clear();
-
-
-    //    let mut old_result = SearchResult::default();
-    //    for depth in 1..=MAX_DEPTH as u32 {
-    //        if self.should_quit(depth) {
-    //            break;
-    //        }
-
-    //        self.has_searched_one_move = false;
-
-    //        old_result = self.result.clone();
-
-    //        let eval = self.pvs(board, depth, -MAX_EVAL, MAX_EVAL, 0);
-
-    //        self.result.highest_eval = eval;
-    //        self.result.depth_reached = depth;
-    //        self.result.pv = self.extract_pv(depth, board);
-    //        self.result.time = self.start_time.elapsed().as_millis();
-    //        Search::print_info(&self.result);
-    //    }
-    //    self.result.clone()
-    //}
-
-    //// Principal variation search using fail-soft alpha beta search
-    //fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, beta: i32, ply: u32) -> i32 {
-    //    if self.should_quit(depth) {
-    //        return 0;
-    //    }
-
-    //    self.result.nodes += 1;
-
-    //    if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-    //        if entry.hash == board.zobrist_hash && entry.depth >= depth {
-    //            self.result.transpositions += 1;
-    //            match entry.node_type {
-    //                NodeType::Exact => return entry.eval,
-    //                NodeType::LowerBound => {
-    //                    if entry.eval <= alpha {
-    //                        return entry.eval;
-    //                    }
-    //                }
-    //                NodeType::UpperBound => {
-    //                    if entry.eval >= beta {
-    //                        return entry.eval;
-    //                    }
-    //                }
-    //            }
-    //        }
-    //    }
-
-    //    if board.state().halfmove_clock >= 100 {
-    //        return 0;
-    //    }
-
-    //    // TODO: Make this const generic
-    //    if board.can_detect_threefold_repetition {
-    //        if board.ply - board.state().last_irreversible_ply >= 4 {
-    //            let mut ply = (board.ply - 2) as i32;
-    //            let mut count = 0;
-    //            while ply >= board.state().last_irreversible_ply as i32 {
-    //                let state = &board.states[board.ply as usize];
-    //                if state.zobrist_hash == board.zobrist_hash {
-    //                    count += 1;
-    //                }
-    //                ply -= 2;
-    //            }
-    //            let is_draw = (count == 2) || (count == 1 && board.ply > self.root_ply + 2);
-    //            if is_draw {
-    //                return 0;
-    //            }
-    //        }
-    //    }
-
-    //    // Leaf node reached, so we run quiescence search
-    //    if depth == 0 {
-    //        return self.quiescence_search(board, alpha, beta, ply);
-    //    }
-
-    //    let mut moves = generate_moves(board);
-
-    //    // Check for terminal positions
-    //    if moves.is_empty() {
-    //        let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
-    //        return if board.attacked(king_square) {
-    //            -MAX_EVAL + ply as i32
-    //        } else {
-    //            0 // Stalemate
-    //        };
-    //    }
-
-    //    self.order_moves::<false>(board, &mut moves, ply);
-
-    //    let mut best_move: Option<Move> = None;
-    //    let mut evaluation_bound = NodeType::UpperBound;
-    //    let mut best_eval = -MAX_EVAL;
-
-    //    // Search remaining moves with zero window
-    //    for (i, mov) in moves.iter().enumerate() {
-    //        board.make_move(*mov);
-
-    //        let eval = if i == 0 {
-    //            // The first move is searched normally
-    //            -self.pvs(board, depth - 1, -beta, -alpha, ply + 1)
-    //        } else {
-    //            // Try null-window search first
-    //            let mut eval = -self.pvs(board, depth - 1, -alpha - 1, -alpha, ply + 1);
-
-    //            // If the null-window search failed high, do a full re-search
-    //            if eval > alpha && eval < beta {
-    //                eval = -self.pvs(board, depth - 1, -beta, -alpha, ply + 1);
-    //            }
-
-    //            eval
-    //        };
-
-    //        board.unmake_move(*mov);
-
-    //        if ply == 0 {
-    //            self.has_searched_one_move = true;
-    //        }
-
-    //        if eval > best_eval {
-    //            best_eval = eval;
-    //            best_move = Some(*mov);
-
-    //            if eval > alpha {
-    //                // We found a move better than alpha and update alpha
-    //                evaluation_bound = NodeType::Exact;
-    //                alpha = eval;
-    //            }
-    //        }
-
-    //        if eval >= beta {
-    //            // Fail soft beta-cutoff: move is too good so the opponent refutes this line, we
-    //            // therefore exit
-    //            evaluation_bound = NodeType::LowerBound;
-
-    //            // Killer Move is a quiet move which caused a beta-cutoff in a sibling Cut-node(LowerBound-node), or any other earlier branch in the tree with the same ply distance to the root
-    //            if !board.is_capture(*mov) {
-    //                self.update_killer_moves(*mov, ply);
-    //            }
-    //            break;
-    //        }
-    //    }
-
-    //    let entry = TranspositionEntry::new(depth, best_eval, best_move.unwrap(), evaluation_bound, board.zobrist_hash);
-    //    board.transposition_table.store(entry);
-
-    //    best_eval
-    //}
-
-    //fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
-    //    if self.should_quit(ply) {
-    //        return 0;
-    //    }
-
-    //    self.result.nodes += 1;
-
-    //    if board.state().halfmove_clock >= 100 {
-    //        return 0;
-    //    }
-
-    //    // TODO: Make this const generic
-    //    if board.can_detect_threefold_repetition {
-    //        if board.ply - board.state().last_irreversible_ply >= 4 {
-    //            let mut ply = (board.ply - 2) as i32;
-    //            let mut count = 0;
-    //            while ply >= board.state().last_irreversible_ply as i32 {
-    //                let state = &board.states[ply as usize];
-    //                if state.zobrist_hash == board.zobrist_hash {
-    //                    count += 1;
-    //                }
-    //                ply -= 2;
-    //            }
-    //            let is_draw = (count == 2) || (count == 1 && board.ply > self.root_ply + 2);
-    //            if is_draw {
-    //                return 0;
-    //            }
-    //        }
-    //    }
-
-    //    let stand_pat = evaluate(board);
-    //    if stand_pat >= beta {
-    //        return beta;
-    //    }
-    //    if stand_pat > alpha {
-    //        alpha = stand_pat;
-    //    }
-
-    //    let mut moves = generate_moves(board);
-    //    if moves.is_empty() {
-    //        let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
-    //        return if board.attacked(king_square) {
-    //            -MAX_EVAL + ply as i32
-    //        } else {
-    //            0 // Stalemate
-    //        };
-    //    }
-    //    moves.retain(|mov| board.is_capture(*mov));
-    //    self.order_moves::<true>(board, &mut moves, ply);
-
-    //    let mut best_eval = stand_pat;
-
-    //    for mov in moves {
-    //        board.make_move(mov);
-    //        let eval = -self.quiescence_search(board, -beta, -alpha, ply + 1);
-    //        board.unmake_move(mov);
-
-    //        if eval > best_eval {
-    //            best_eval = eval;
-
-    //            if eval > alpha {
-    //                // We found a move better than alpha and update alpha
-    //                alpha = eval;
-    //            }
-    //        }
-
-    //        if eval >= beta {
-    //            // Fail soft beta-cutoff: move is too good so the opponent refutes this line, we
-    //            // therefore exit
-    //            break;
-    //        }
-    //    }
-
-    //    return best_eval;
-    //}
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
+
+        println!("start: {}", evaluate(board));
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
-        
+
         // Try book moves first
         //if let Some(book_move) = get_book_move(board, 1.0) {
         //    self.result.pv.push(book_move);
@@ -384,8 +127,6 @@ impl Search {
             SearchMode::Clock => self.calculate_time(board),
         };
 
-        let mut previous_best_move = None;
-        
         for depth in 1..=MAX_DEPTH as u32 {
             if self.should_quit(depth) {
                 break;
@@ -394,23 +135,23 @@ impl Search {
             self.has_searched_one_move = false;
 
             let eval = self.pvs(board, depth, -MAX_EVAL, MAX_EVAL, 0);
-            
+
             // Don't update results if search was interrupted
             if self.should_quit(depth) {
                 break;
             }
 
             let new_pv = self.extract_pv(depth, board);
-            
+
             // Aspiration windows for deeper searches
             if depth >= 4 {
                 let window = 50;
                 let mut alpha = eval - window;
                 let mut beta = eval + window;
-                
+
                 loop {
                     let score = self.pvs(board, depth, alpha, beta, 0);
-                    
+
                     if score <= alpha {
                         alpha = -MAX_EVAL;
                     } else if score >= beta {
@@ -426,15 +167,10 @@ impl Search {
             self.result.depth_reached = depth;
             self.result.pv = new_pv;
             self.result.time = self.start_time.elapsed().as_millis();
-            
-            // Store best move for next iteration
-            if let Some(best_move) = self.result.pv.first() {
-                previous_best_move = Some(*best_move);
-            }
-            
+
             Search::print_info(&self.result);
         }
-        
+
         self.result.clone()
     }
 
@@ -451,8 +187,8 @@ impl Search {
         self.result.nodes += 1;
 
         // Mate distance pruning
-        alpha = alpha.max(-MATE_SCORE + ply as i32);
-        beta = beta.min(MATE_SCORE - ply as i32);
+        alpha = alpha.max(-MAX_EVAL + ply as i32);
+        beta = beta.min(MAX_EVAL - ply as i32);
         if alpha >= beta {
             return alpha;
         }
@@ -461,28 +197,22 @@ impl Search {
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
             if entry.hash == board.zobrist_hash && entry.depth >= depth {
                 self.result.transpositions += 1;
-                let score = if entry.eval > MATE_THRESHOLD {
-                    entry.eval - ply as i32
-                } else if entry.eval < -MATE_THRESHOLD {
-                    entry.eval + ply as i32
-                } else {
-                    entry.eval
-                };
 
                 match entry.node_type {
-                    NodeType::Exact => return score,
-                    NodeType::LowerBound => alpha = alpha.max(score),
-                    NodeType::UpperBound => beta = beta.min(score),
+                    NodeType::Exact => return entry.eval,
+                    NodeType::LowerBound => alpha = alpha.max(entry.eval),
+                    NodeType::UpperBound => beta = beta.min(entry.eval),
                 }
 
                 if alpha >= beta {
-                    return score;
+                    return entry.eval;
                 }
             }
         }
 
         // Leaf node reached, run quiescence search
         if depth == 0 {
+            //return evaluate(board);
             return self.quiescence_search(board, alpha, beta, ply);
         }
 
@@ -492,7 +222,7 @@ impl Search {
         if moves.is_empty() {
             let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
             return if board.attacked(king_square) {
-                -MATE_SCORE + ply as i32
+                -MAX_EVAL + ply as i32
             } else {
                 0 // Stalemate
             };
@@ -545,19 +275,7 @@ impl Search {
 
         // Store position in transposition table
         if let Some(best_move) = best_move {
-            let entry = TranspositionEntry::new(
-                depth,
-                if best_eval > MATE_THRESHOLD {
-                    best_eval + ply as i32
-                } else if best_eval < -MATE_THRESHOLD {
-                    best_eval - ply as i32
-                } else {
-                    best_eval
-                },
-                best_move,
-                evaluation_bound,
-                board.zobrist_hash
-            );
+            let entry = TranspositionEntry::new(depth, best_eval, best_move, evaluation_bound, board.zobrist_hash);
             board.transposition_table.store(entry);
         }
 
@@ -569,24 +287,24 @@ impl Search {
             return 0;
         }
 
-        self.result.nodes += 1;
-
         // Stand pat evaluation
         let stand_pat = evaluate(board);
         if stand_pat >= beta {
             return beta;
         }
-        
+
         alpha = alpha.max(stand_pat);
 
         // Generate and filter captures
         let mut moves = generate_moves(board);
         moves.retain(|mov| board.is_capture(*mov));
-        
+
         if moves.is_empty() {
             return stand_pat;
         }
-        
+
+        self.result.nodes += 1;
+
         self.order_moves::<true>(board, &mut moves, ply);
 
         for mov in moves {
@@ -608,11 +326,10 @@ impl Search {
             return true;
         }
 
-        if board.can_detect_threefold_repetition 
-            && board.ply - board.state().last_irreversible_ply >= 4 {
+        if board.can_detect_threefold_repetition && board.ply - board.state().last_irreversible_ply >= 4 {
             let mut count = 0;
             let mut current_ply = (board.ply - 2) as i32;
-            
+
             while current_ply >= board.state().last_irreversible_ply as i32 {
                 if board.states[current_ply as usize].zobrist_hash == board.zobrist_hash {
                     count += 1;
@@ -623,7 +340,7 @@ impl Search {
                 current_ply -= 2;
             }
         }
-        
+
         false
     }
 
