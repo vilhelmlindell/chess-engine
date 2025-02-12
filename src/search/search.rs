@@ -105,8 +105,6 @@ impl Default for Search {
 
 impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
-
-        println!("start: {}", evaluate(board));
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
 
         // Try book moves first
