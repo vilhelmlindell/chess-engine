@@ -184,12 +184,11 @@ impl Search {
 
         self.result.nodes += 1;
 
-        // Mate distance pruning
-        alpha = alpha.max(-MAX_EVAL + ply as i32);
-        beta = beta.min(MAX_EVAL - ply as i32);
-        //if alpha >= beta {
-        //    return alpha;
-        //}
+        // Leaf node reached, run quiescence search
+        if depth == 0 {
+            //return evaluate(board);
+            return self.quiescence_search(board, alpha, beta, ply);
+        }
 
         // Transposition table lookup
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
@@ -208,21 +207,22 @@ impl Search {
             }
         }
 
-        // Leaf node reached, run quiescence search
-        if depth == 0 {
-            //return evaluate(board);
-            return self.quiescence_search(board, alpha, beta, ply);
-        }
-
-        if ALLOW_NULL_MOVE && !board.in_check() { // Only apply in non-check positions and at sufficient depth
+        let reduction = 2;
+        if ALLOW_NULL_MOVE && !board.in_check() && depth > reduction + 1 {
             board.make_null_move();
-            let reduction = 2; // Reduction factor - tune this!
-            let null_move_eval = -self.pvs::<false>(board, u32::min(0, depth - 1 - reduction), -beta, -beta + 1, ply + 1);
+            let null_move_eval = -self.pvs::<false>(board, depth - 1 - reduction, -beta, -beta + 1, ply + 1);
             board.unmake_null_move();
 
             if null_move_eval >= beta {
-                return null_move_eval;  // Beta cutoff, prune this node
+                return null_move_eval; // Beta cutoff, prune this node
             }
+        }
+
+        // Mate distance pruning
+        alpha = alpha.max(-MAX_EVAL + ply as i32);
+        beta = beta.min(MAX_EVAL - ply as i32);
+        if alpha >= beta {
+            return alpha;
         }
 
         let mut moves = generate_moves(board);
