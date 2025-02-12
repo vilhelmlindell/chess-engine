@@ -214,10 +214,10 @@ impl Search {
             return self.quiescence_search(board, alpha, beta, ply);
         }
 
-        if ALLOW_NULL_MOVE && depth >= 3 && !board.in_check() { // Only apply in non-check positions and at sufficient depth
+        if ALLOW_NULL_MOVE && !board.in_check() { // Only apply in non-check positions and at sufficient depth
             board.make_null_move();
             let reduction = 2; // Reduction factor - tune this!
-            let null_move_eval = -self.pvs::<false>(board, depth - 1 - reduction, -beta, -beta + 1, ply + 1);
+            let null_move_eval = -self.pvs::<false>(board, u32::min(0, depth - 1 - reduction), -beta, -beta + 1, ply + 1);
             board.unmake_null_move();
 
             if null_move_eval >= beta {
