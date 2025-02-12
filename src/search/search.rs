@@ -105,8 +105,6 @@ impl Default for Search {
 
 impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
-
-        println!("start: {}", evaluate(board));
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
 
         // Try book moves first
@@ -134,7 +132,7 @@ impl Search {
 
             self.has_searched_one_move = false;
 
-            let eval = self.pvs(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+            let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
             // Don't update results if search was interrupted
             if self.should_quit(depth) {
@@ -150,7 +148,7 @@ impl Search {
                 let mut beta = eval + window;
 
                 loop {
-                    let score = self.pvs(board, depth, alpha, beta, 0);
+                    let score = self.pvs::<true>(board, depth, alpha, beta, 0);
 
                     if score <= alpha {
                         alpha = -MAX_EVAL;
@@ -174,7 +172,7 @@ impl Search {
         self.result.clone()
     }
 
-    fn pvs(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
+    fn pvs<const ALLOW_NULL_MOVE: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
         if self.should_quit(depth) {
             return 0;
         }
@@ -189,9 +187,9 @@ impl Search {
         // Mate distance pruning
         alpha = alpha.max(-MAX_EVAL + ply as i32);
         beta = beta.min(MAX_EVAL - ply as i32);
-        if alpha >= beta {
-            return alpha;
-        }
+        //if alpha >= beta {
+        //    return alpha;
+        //}
 
         // Transposition table lookup
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
@@ -214,6 +212,17 @@ impl Search {
         if depth == 0 {
             //return evaluate(board);
             return self.quiescence_search(board, alpha, beta, ply);
+        }
+
+        if ALLOW_NULL_MOVE && depth >= 3 && !board.in_check() { // Only apply in non-check positions and at sufficient depth
+            board.make_null_move();
+            let reduction = 2; // Reduction factor - tune this!
+            let null_move_eval = -self.pvs::<false>(board, depth - 1 - reduction, -beta, -beta + 1, ply + 1);
+            board.unmake_null_move();
+
+            if null_move_eval >= beta {
+                return null_move_eval;  // Beta cutoff, prune this node
+            }
         }
 
         let mut moves = generate_moves(board);
@@ -239,11 +248,11 @@ impl Search {
             board.make_move(mov);
 
             let eval = if i == 0 {
-                -self.pvs(board, depth - 1, -beta, -alpha, ply + 1)
+                -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1)
             } else {
-                let mut eval = -self.pvs(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+                let mut eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
                 if eval > alpha && eval < beta {
-                    eval = -self.pvs(board, depth - 1, -beta, -alpha, ply + 1);
+                    eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
                 }
                 eval
             };

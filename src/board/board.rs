@@ -22,7 +22,11 @@ pub const RANK_6: Bitboard = Bitboard(0x0000000000FF0000);
 pub const RANK_7: Bitboard = Bitboard(0x000000000000FF00);
 pub const RANK_8: Bitboard = Bitboard(0x00000000000000FF);
 pub const RANKS: [Bitboard; 8] = [RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8];
-pub const TOTAL_MATERIAL_STARTPOS: u32 = 16 * PieceType::Pawn.standard_value() + 4 * PieceType::Knight.standard_value() + 4 * PieceType::Bishop.standard_value() + 4 * PieceType::Rook.standard_value() + 2 * PieceType::Queen.standard_value();
+pub const TOTAL_MATERIAL_STARTPOS: u32 = 16 * PieceType::Pawn.standard_value()
+    + 4 * PieceType::Knight.standard_value()
+    + 4 * PieceType::Bishop.standard_value()
+    + 4 * PieceType::Rook.standard_value()
+    + 2 * PieceType::Queen.standard_value();
 
 const BLACK_QUEENSIDE_START_MASK: Bitboard = Bitboard((1 << 0) | (1 << 4)); // a8 and e8
 const BLACK_KINGSIDE_START_MASK: Bitboard = Bitboard((1 << 7) | (1 << 4)); // h8 and e8
@@ -228,6 +232,9 @@ impl Board {
         self.zobrist_hash = get_zobrist_hash(self);
     }
     pub fn make_move(&mut self, mov: Move) {
+        if mov.to() == 64 {
+            println!("{}", mov);
+        }
         let mut state = BoardState::from_state(self.state());
 
         let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
@@ -366,47 +373,44 @@ impl Board {
         self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
     }
     pub fn make_null_move(&mut self) {
-        let mut state = BoardState::from_state(self.state());
+        let state = BoardState::from_state(self.state());
 
-        // Save the current en passant square, if any, to the state.
+        let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
+
+        let castling_rights_bits_after = Self::castling_rights_bits(state.castling_rights);
+        self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
+
         if let Some(prev_en_passant_square) = self.state().en_passant_square {
             let prev_file = prev_en_passant_square % 8;
             self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
         }
 
-        // Clear the en passant square, as no pawn move occurs in a null move.
-        state.en_passant_square = None;
-
-        // Toggle the side to move.
         self.side = self.side.enemy();
         self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
+        self.absolute_pinned_squares = self.absolute_pins();
 
-        // Increment the halfmove clock, as no irreversible move occurs.
-        state.halfmove_clock += 1;
-
-        // Push the updated state to the state stack.
-        self.states.push(state);
-
-        // Increment the ply count.
         self.ply += 1;
+        self.states.push(state);
     }
 
     pub fn unmake_null_move(&mut self) {
-        // Decrement the ply count.
         self.ply -= 1;
-
-        // Toggle the side to move back.
         self.side = self.side.enemy();
         self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
 
-        // Pop the previous state from the state stack.
+        let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
+
+        self.absolute_pinned_squares = self.absolute_pins();
         self.states.pop();
 
-        // Restore the en passant square from the previous state, if it existed.
+        let castling_rights_bits_after = Self::castling_rights_bits(self.state().castling_rights);
+
         if let Some(prev_en_passant_square) = self.state().en_passant_square {
             let prev_file = prev_en_passant_square % 8;
             self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
         }
+
+        self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
     }
     #[inline(always)]
     pub fn attacked(&self, square: usize) -> bool {
@@ -448,6 +452,13 @@ impl Board {
         attackers |= rook_attacks(square, self.occupied_squares) & (rooks | queens);
 
         attackers
+    }
+    pub fn in_check(&self) -> bool {
+        let king_square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
+        if self.piece_squares[Piece::new(PieceType::King, self.side)].count_ones() == 0 {
+            println!("hello");
+        }
+        return self.attacked(king_square);
     }
     #[inline(always)]
     pub fn king_attacked(&self, from: usize, to: usize) -> bool {
@@ -758,6 +769,8 @@ mod tests {
         for mov in generate_moves(&board) {
             board.make_move(mov);
             board.unmake_move(mov);
+            board.make_null_move();
+            board.unmake_null_move();
             println!();
             println!("{original}");
             println!("{board}");
