@@ -428,7 +428,7 @@ impl Search {
     fn calculate_time(&mut self, board: &Board) -> u128 {
         let half_moves_left = Search::remaining_half_moves(board.total_material) as u128;
         let time_left = self.params.clock.time[board.side] + self.params.clock.inc[board.side] * half_moves_left / 2;
-        (time_left / half_moves_left) / 2
+        time_left / half_moves_left
     }
 
     // Approximation for amount of half moves remaining
