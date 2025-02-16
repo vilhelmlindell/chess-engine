@@ -108,10 +108,10 @@ impl Search {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
 
         // Try book moves first
-        //if let Some(book_move) = get_book_move(board, 1.0) {
-        //    self.result.pv.push(book_move);
-        //    return self.result.clone();
-        //}
+        if let Some(book_move) = get_book_move(board, 1.0) {
+            self.result.pv.push(book_move);
+            return self.result.clone();
+        }
 
         self.params = search_params;
         self.pv.clear();
