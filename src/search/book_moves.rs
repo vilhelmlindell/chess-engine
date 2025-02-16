@@ -39,6 +39,8 @@ fn initialize_book_moves() -> HashMap<String, Vec<BookMove>> {
     let mut moves_by_position: HashMap<String, Vec<BookMove>> = HashMap::new();
     let mut current_position = String::new();
 
+    let dir = std::env::current_dir().unwrap();
+    println!("{}", dir.display());
     for line in read_to_string("opening_book.txt").unwrap().lines() {
         if line.starts_with("pos") {
             // Extract the position key.
