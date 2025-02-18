@@ -1,0 +1,3 @@
+[submodule "lichess-bot"]
+	path = lichess-bot
+	url = git@github.com:vilhelmlindell/lichess-bot.git
