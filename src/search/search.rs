@@ -30,10 +30,11 @@ const MAX_EVAL: i32 = 1000000;
 pub struct SearchParams {
     pub depth: Option<u32>, // Maximum depth to search to
     //pub nodes: usize,            // Maximum number of nodes to search
-    pub move_time: u128, // Maximum time per move to search
-    pub clock: Clock,    // Time available for entire game
+    pub move_time: u128,         // Maximum time per move to search
+    pub clock: Clock,            // Time available for entire game
     pub search_mode: SearchMode, // Defines the mode to search in
-                         //pub quiet: bool,             // No intermediate search stats updates
+    pub use_book: bool,
+    //pub quiet: bool,             // No intermediate search stats updates
 }
 
 pub struct Search {
@@ -114,10 +115,13 @@ impl Default for Search {
 impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.result = SearchResult::default();
 
-        if let Some(book_move) = get_book_move(board, 1.0) {
-            self.result.pv.push(book_move);
-            return self.result.clone();
+        if search_params.use_book {
+            if let Some(book_move) = get_book_move(board, 1.0) {
+                self.result.pv.push(book_move);
+                return self.result.clone();
+            }
         }
 
         self.params = search_params;

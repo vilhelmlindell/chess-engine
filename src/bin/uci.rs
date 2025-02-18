@@ -180,6 +180,7 @@ impl Uci {
         let mut words = command.split_whitespace().peekable();
         words.next();
         let mut search_params = SearchParams::default();
+        search_params.use_book = true;
 
         while let Some(token) = words.next() {
             match token {
@@ -236,6 +237,7 @@ impl Uci {
                     }
                 }
                 "infinite" => search_params.search_mode = SearchMode::Infinite,
+                "nobook" => search_params.use_book = false,
                 _ => {}
             }
         }

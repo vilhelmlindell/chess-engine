@@ -4,7 +4,6 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::fs::read_to_string;
 use std::sync::LazyLock;
-use std::time::Instant;
 
 struct BookMove {
     move_string: String,
@@ -37,11 +36,9 @@ pub fn get_book_move(board: &Board, times_played_weight: f32) -> Option<Move> {
     None
 }
 fn initialize_book_moves() -> HashMap<String, Vec<BookMove>> {
-    let start = Instant::now();
     let mut moves_by_position: HashMap<String, Vec<BookMove>> = HashMap::new();
     let mut current_position = String::new();
 
-    let dir = std::env::current_dir().unwrap();
     for line in read_to_string("opening_book.txt").unwrap().lines() {
         if line.starts_with("pos") {
             // Extract the position key.
@@ -59,6 +56,5 @@ fn initialize_book_moves() -> HashMap<String, Vec<BookMove>> {
             moves_by_position.entry(current_position.clone()).and_modify(|e| e.push(entry));
         }
     }
-    let duration = start.elapsed();
     moves_by_position
 }
