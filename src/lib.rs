@@ -1,3 +1,5 @@
+#![feature(portable_simd)]
+
 pub mod board;
 pub mod evaluation;
 pub mod move_generation;

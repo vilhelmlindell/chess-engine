@@ -18,6 +18,7 @@ pub static PAWN_ATTACKS: LazyLock<[[Bitboard; 64]; 2]> = LazyLock::new(precomput
 pub static BETWEEN_RAYS: LazyLock<[[Bitboard; 64]; 64]> = LazyLock::new(precompute_between_rays);
 pub static LINE_RAYS: LazyLock<[[Bitboard; 64]; 64]> = LazyLock::new(precompute_line_rays);
 
+#[inline]
 pub fn bishop_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.0);
     index &= BISHOP_ATTACK_MASKS[square].0;
@@ -25,6 +26,7 @@ pub fn bishop_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     index >>= 64 - BISHOP_SHIFT_AMOUNT[square] as usize;
     BISHOP_ATTACKS[square][index.0 as usize]
 }
+#[inline]
 pub fn rook_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.0);
     index &= ROOK_ATTACK_MASKS[square].0;
@@ -32,6 +34,7 @@ pub fn rook_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     index >>= 64 - ROOK_SHIFT_AMOUNT[square] as usize;
     ROOK_ATTACKS[square][index.0 as usize]
 }
+#[inline]
 pub fn queen_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     bishop_attacks(square, blockers) | rook_attacks(square, blockers)
 }

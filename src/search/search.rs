@@ -1,12 +1,18 @@
+use crate::board::bitboard::Bitboard;
 use crate::board::piece::{Piece, PieceType};
-use crate::board::piece_move::Move;
-use crate::board::Board;
+use crate::board::piece_move::{Move, MoveType};
+use crate::board::utils::flip_rank;
+use crate::board::{Board, Side};
 use crate::evaluation::evaluate;
 use crate::move_generation::generate_moves;
 use crate::search::book_moves::get_book_move;
 use crate::search::transposition_table::{NodeType, TranspositionEntry};
+use core::simd;
+use std::char::MAX;
 use std::cmp::Ordering;
-use std::i32;
+use std::i32::{self};
+use std::simd::num::SimdUint;
+use std::simd::u64x8;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
@@ -18,7 +24,7 @@ const HASH_MOVE_SCORE: i32 = 4000;
 const CAPTURE_BASE_SCORE: i32 = 1000;
 const KILLER_MOVE_SCORE: i32 = 800;
 
-const MAX_EVAL: i32 = 100000;
+const MAX_EVAL: i32 = 1000000;
 
 #[derive(PartialEq, Copy, Clone, Default)]
 pub struct SearchParams {
@@ -39,6 +45,7 @@ pub struct Search {
     pub should_quit: Arc<AtomicBool>, // Shared atomic flag
     pub root_ply: u32,
     pub has_searched_one_move: bool,
+    pub syzygy: pyrrhic_rs::TableBases<Board>,
     start_time: Instant,
 }
 
@@ -98,6 +105,7 @@ impl Default for Search {
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             pv: Vec::with_capacity(MAX_DEPTH),
             should_quit: Arc::new(AtomicBool::new(false)),
+            syzygy: pyrrhic_rs::TableBases::<Board>::new("./syzygy/tb345").unwrap(),
             has_searched_one_move: false,
         }
     }
@@ -107,7 +115,6 @@ impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
 
-        // Try book moves first
         if let Some(book_move) = get_book_move(board, 1.0) {
             self.result.pv.push(book_move);
             return self.result.clone();
@@ -118,6 +125,64 @@ impl Search {
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
         self.root_ply = board.ply;
+
+        if board.occupied_squares.count_ones() <= 5 {
+            let mut bitboards = u64x8::from_array([
+                *board.side_squares[Side::White],
+                *board.side_squares[Side::Black],
+                *(board.piece_squares[Piece::WhiteKing] | board.piece_squares[Piece::BlackKing]),
+                *(board.piece_squares[Piece::WhiteQueen] | board.piece_squares[Piece::BlackQueen]),
+                *(board.piece_squares[Piece::WhiteRook] | board.piece_squares[Piece::BlackRook]),
+                *(board.piece_squares[Piece::WhiteBishop] | board.piece_squares[Piece::BlackBishop]),
+                *(board.piece_squares[Piece::WhiteKnight] | board.piece_squares[Piece::BlackKnight]),
+                *(board.piece_squares[Piece::WhitePawn] | board.piece_squares[Piece::BlackPawn]),
+            ]);
+            bitboards = bitboards.swap_bytes();
+            for bitboard in bitboards.to_array().iter() {
+                println!("{}", Bitboard(*bitboard));
+            }
+            println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
+            //println!("ep {}", board.state().halfmove_clock as u32 / 2);
+            let result = self
+                .syzygy
+                .probe_root(
+                    bitboards[0],
+                    bitboards[1],
+                    bitboards[2],
+                    bitboards[3],
+                    bitboards[4],
+                    bitboards[5],
+                    bitboards[6],
+                    bitboards[7],
+                    board.state().halfmove_clock as u32 / 2,
+                    flip_rank(board.state().en_passant_square.unwrap_or(0)) as u32,
+                    board.side.value() == 0,
+                )
+                .expect("Syzygy tablebase probe failed");
+            match result.root {
+                pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
+                pyrrhic_rs::DtzProbeValue::Checkmate=> return self.result.clone(),
+                pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
+                pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
+                    let move_type = match dtz_result.promotion {
+                        pyrrhic_rs::Piece::Knight => MoveType::KnightPromotion,
+                        pyrrhic_rs::Piece::Bishop => MoveType::BishopPromotion,
+                        pyrrhic_rs::Piece::Rook => MoveType::RookPromotion,
+                        pyrrhic_rs::Piece::Queen => MoveType::QueenPromotion,
+                        _ => {
+                            if dtz_result.ep {
+                                MoveType::EnPassant
+                            } else {
+                                MoveType::Normal
+                            }
+                        }
+                    };
+                    let mov = Move::new(flip_rank(dtz_result.from_square as usize), flip_rank(dtz_result.to_square as usize), move_type);
+                    self.result.pv.push(mov);
+                    return self.result.clone();
+                }
+            }
+        }
 
         self.max_time = match search_params.search_mode {
             SearchMode::Infinite => u128::max_value(),
@@ -203,6 +268,59 @@ impl Search {
 
                 if alpha >= beta {
                     return entry.eval;
+                }
+            }
+        }
+
+        if board.occupied_squares.count_ones() <= 5 {
+            let mut bitboards = u64x8::from_array([
+                *board.side_squares[Side::White],
+                *board.side_squares[Side::Black],
+                *(board.piece_squares[Piece::WhiteKing] | board.piece_squares[Piece::BlackKing]),
+                *(board.piece_squares[Piece::WhiteQueen] | board.piece_squares[Piece::BlackQueen]),
+                *(board.piece_squares[Piece::WhiteRook] | board.piece_squares[Piece::BlackRook]),
+                *(board.piece_squares[Piece::WhiteBishop] | board.piece_squares[Piece::BlackBishop]),
+                *(board.piece_squares[Piece::WhiteKnight] | board.piece_squares[Piece::BlackKnight]),
+                *(board.piece_squares[Piece::WhitePawn] | board.piece_squares[Piece::BlackPawn]),
+            ]);
+            bitboards = bitboards.swap_bytes();
+            let result = self
+                .syzygy
+                .probe_root(
+                    bitboards[0],
+                    bitboards[1],
+                    bitboards[2],
+                    bitboards[3],
+                    bitboards[4],
+                    bitboards[5],
+                    bitboards[6],
+                    bitboards[7],
+                    board.state().halfmove_clock as u32,
+                    flip_rank(board.state().en_passant_square.unwrap_or(0)) as u32,
+                    board.side.value() != 0,
+                )
+                .expect("Syzygy tablebase probe failed");
+
+
+            match result.root {
+                pyrrhic_rs::DtzProbeValue::Stalemate => return 0,
+                pyrrhic_rs::DtzProbeValue::Checkmate=> {
+                    let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
+                    if board.attacked(king_square) {
+                        return -MAX_EVAL + ply as i32;
+                    } else {
+                        return MAX_EVAL - ply as i32;
+                    };
+                },
+                pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
+                pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
+                    return match dtz_result.wdl {
+                        pyrrhic_rs::WdlProbeResult::Loss => -MAX_EVAL,
+                        pyrrhic_rs::WdlProbeResult::BlessedLoss => -MAX_EVAL + 10000,
+                        pyrrhic_rs::WdlProbeResult::Draw => 0,
+                        pyrrhic_rs::WdlProbeResult::CursedWin => MAX_EVAL - 10000,
+                        pyrrhic_rs::WdlProbeResult::Win => MAX_EVAL,
+                    };
                 }
             }
         }

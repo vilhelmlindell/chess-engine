@@ -69,9 +69,9 @@ fn generate_pawn_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGA
 
     let bitboard = board.piece_squares[Piece::new(PieceType::Pawn, board.side)];
 
-    let mut pushed_pawns = push_pawns(bitboard, !board.occupied_squares, board.side);
+    let mut pushed_pawns = push_pawns::<IS_WHITE>(bitboard, !board.occupied_squares);
     let rank = if IS_WHITE { RANK_3 } else { RANK_6 };
-    let double_pushed_pawns = push_pawns(pushed_pawns & rank, !board.occupied_squares, board.side);
+    let double_pushed_pawns = push_pawns::<IS_WHITE>(pushed_pawns & rank, !board.occupied_squares);
 
     let mut promoted_pawns = pushed_pawns & (RANK_1 | RANK_8);
     pushed_pawns ^= promoted_pawns;
@@ -269,7 +269,7 @@ fn resolve_single_check<const IS_WHITE: bool>(attacker_square: usize, moves: &mu
         let mut attack_ray = BETWEEN_RAYS[king_square][attacker_square] ^ Bitboard::from_square(attacker_square);
 
         let pawns = board.piece_squares[Piece::new(PieceType::Pawn, board.side)];
-        let mut pushed_pawns = push_pawns(pawns, !board.occupied_squares, board.side);
+        let mut pushed_pawns = push_pawns::<IS_WHITE>(pawns, !board.occupied_squares);
         let promoting_pawns = pushed_pawns & (RANK_1 | RANK_8);
         if promoting_pawns != 0 {
             pushed_pawns ^= promoting_pawns;
@@ -283,7 +283,7 @@ fn resolve_single_check<const IS_WHITE: bool>(attacker_square: usize, moves: &mu
             }
         }
         let rank = if IS_WHITE { RANK_3 } else { RANK_6 };
-        let double_pushed_pawns = push_pawns(pushed_pawns & rank, !board.occupied_squares, board.side);
+        let double_pushed_pawns = push_pawns::<IS_WHITE>(pushed_pawns & rank, !board.occupied_squares);
 
         add_moves_from_bitboard(
             &|to| Move::new((to as i32 + Direction::down(board.side).value()) as usize, to, MoveType::Normal),
@@ -358,8 +358,12 @@ fn legal(board: &Board, from: usize, to: usize) -> bool {
     board.absolute_pinned_squares.bit(from) == 0 || Board::aligned(to, from, board.piece_squares[Piece::new(PieceType::King, board.side)].lsb())
 }
 #[inline(always)]
-fn push_pawns(pawns: Bitboard, empty_squares: Bitboard, side_to_move: Side) -> Bitboard {
-    (pawns.north() << ((side_to_move.value()) << 4)) & empty_squares
+fn push_pawns<const IS_WHITE: bool>(pawns: Bitboard, empty_squares: Bitboard) -> Bitboard {
+    if IS_WHITE {
+        pawns.north() & empty_squares
+    } else {
+        pawns.south() & empty_squares
+    }
 }
 #[inline(always)]
 fn can_castle(board: &Board, squares: Bitboard, king_squares: [usize; 2]) -> bool {

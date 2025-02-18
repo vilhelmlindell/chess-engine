@@ -2,6 +2,7 @@ use super::bitboard::Bitboard;
 use super::direction::Direction;
 use super::piece::{Piece, PieceType};
 use super::piece_move::{Move, MoveType, Square};
+use super::utils::flip_rank;
 use super::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
 use crate::evaluation::piece_square_tables::{endgame_position_value, midgame_position_value};
 use crate::move_generation::attack_tables::*;
@@ -10,6 +11,7 @@ use num_enum::UnsafeFromPrimitive;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
+use pyrrhic_rs::EngineAdapter;
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -575,6 +577,38 @@ impl Board {
     }
 }
 
+// NOTE: pyrrheic_rs uses A1=0, while my engine uses A8=0. This leads to me needing to convert
+// between these two representations when calling probing tablebases. 
+impl EngineAdapter for Board {
+    fn pawn_attacks(color: pyrrhic_rs::Color, square: u64) -> u64 {
+        if color == pyrrhic_rs::Color::White {
+            PAWN_ATTACKS[Side::Black][flip_rank(square as usize)].swap_bytes()
+        } else {
+            PAWN_ATTACKS[Side::White][flip_rank(square as usize)].swap_bytes()
+        }
+    }
+
+    fn knight_attacks(square: u64) -> u64 {
+        KNIGHT_ATTACK_MASKS[flip_rank(square as usize)].swap_bytes()
+    }
+
+    fn bishop_attacks(square: u64, occupied: u64) -> u64 {
+        bishop_attacks(flip_rank(square as usize), Bitboard(occupied)).swap_bytes()
+    }
+
+    fn rook_attacks(square: u64, occupied: u64) -> u64 {
+        rook_attacks(flip_rank(square as usize), Bitboard(occupied)).swap_bytes()
+    }
+
+    fn queen_attacks(square: u64, occupied: u64) -> u64 {
+        queen_attacks(flip_rank(square as usize), Bitboard(occupied)).swap_bytes()
+    }
+
+    fn king_attacks(square: u64) -> u64 {
+        KING_ATTACK_MASKS[flip_rank(square as usize)].swap_bytes()
+    }
+}
+
 impl Default for Board {
     fn default() -> Self {
         Self {
@@ -718,7 +752,7 @@ impl Default for BoardState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::move_generation::generate_moves;
+    use crate::{board, move_generation::generate_moves};
 
     #[test]
     fn test_load_fen() {
@@ -782,5 +816,11 @@ mod tests {
                 assert!(original.absolute_pins() == board.absolute_pins());
             }
         }
+    }
+    #[test]
+    fn engine_adapter() {
+        let board = Board::from_fen("4k3/8/3QK3/8/8/8/8/8 w - - 0 1");
+        println!("{}", Bitboard(Board::queen_attacks(board.piece_squares[Piece::WhiteQueen].lsb() as u64, board.occupied_squares.0)));
+        println!("{}", board.piece_squares[Piece::WhiteQueen]);
     }
 }
