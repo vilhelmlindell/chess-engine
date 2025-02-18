@@ -138,10 +138,10 @@ impl Search {
                 *(board.piece_squares[Piece::WhitePawn] | board.piece_squares[Piece::BlackPawn]),
             ]);
             bitboards = bitboards.swap_bytes();
-            for bitboard in bitboards.to_array().iter() {
-                println!("{}", Bitboard(*bitboard));
-            }
-            println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
+            //for bitboard in bitboards.to_array().iter() {
+            //    println!("{}", Bitboard(*bitboard));
+            //}
+            //println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
             //println!("ep {}", board.state().halfmove_clock as u32 / 2);
             let result = self
                 .syzygy
@@ -155,13 +155,13 @@ impl Search {
                     bitboards[6],
                     bitboards[7],
                     board.state().halfmove_clock as u32 / 2,
-                    flip_rank(board.state().en_passant_square.unwrap_or(0)) as u32,
+                    flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32,
                     board.side.value() == 0,
                 )
                 .expect("Syzygy tablebase probe failed");
             match result.root {
                 pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
-                pyrrhic_rs::DtzProbeValue::Checkmate=> return self.result.clone(),
+                pyrrhic_rs::DtzProbeValue::Checkmate => return self.result.clone(),
                 pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
                 pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
                     let move_type = match dtz_result.promotion {
@@ -284,6 +284,12 @@ impl Search {
                 *(board.piece_squares[Piece::WhitePawn] | board.piece_squares[Piece::BlackPawn]),
             ]);
             bitboards = bitboards.swap_bytes();
+            //for bitboard in bitboards.to_array().iter() {
+            //    println!("{}", Bitboard(*bitboard));
+            //}
+            //println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
+            //println!("halfmove {}", board.state().halfmove_clock as u32 / 2);
+            //println!("fen {}", board.fen());
             let result = self
                 .syzygy
                 .probe_root(
@@ -295,23 +301,21 @@ impl Search {
                     bitboards[5],
                     bitboards[6],
                     bitboards[7],
-                    board.state().halfmove_clock as u32,
-                    flip_rank(board.state().en_passant_square.unwrap_or(0)) as u32,
-                    board.side.value() != 0,
+                    board.state().halfmove_clock as u32 / 2,
+                    flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32,
+                    board.side.value() == 0,
                 )
                 .expect("Syzygy tablebase probe failed");
-
-
             match result.root {
                 pyrrhic_rs::DtzProbeValue::Stalemate => return 0,
-                pyrrhic_rs::DtzProbeValue::Checkmate=> {
+                pyrrhic_rs::DtzProbeValue::Checkmate => {
                     let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
                     if board.attacked(king_square) {
                         return -MAX_EVAL + ply as i32;
                     } else {
                         return MAX_EVAL - ply as i32;
                     };
-                },
+                }
                 pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
                 pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
                     return match dtz_result.wdl {

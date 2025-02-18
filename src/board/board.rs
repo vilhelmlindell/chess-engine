@@ -234,9 +234,6 @@ impl Board {
         self.zobrist_hash = get_zobrist_hash(self);
     }
     pub fn make_move(&mut self, mov: Move) {
-        if mov.to() == 64 {
-            println!("{}", mov);
-        }
         let mut state = BoardState::from_state(self.state());
 
         let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
@@ -578,7 +575,8 @@ impl Board {
 }
 
 // NOTE: pyrrheic_rs uses A1=0, while my engine uses A8=0. This leads to me needing to convert
-// between these two representations when calling probing tablebases. 
+// between these two representations when calling probing tablebases. Possible fix is to change my
+// engine to A1=0 but that's a pain in the ass
 impl EngineAdapter for Board {
     fn pawn_attacks(color: pyrrhic_rs::Color, square: u64) -> u64 {
         if color == pyrrhic_rs::Color::White {
@@ -593,15 +591,15 @@ impl EngineAdapter for Board {
     }
 
     fn bishop_attacks(square: u64, occupied: u64) -> u64 {
-        bishop_attacks(flip_rank(square as usize), Bitboard(occupied)).swap_bytes()
+        bishop_attacks(flip_rank(square as usize), Bitboard(occupied.swap_bytes())).swap_bytes()
     }
 
     fn rook_attacks(square: u64, occupied: u64) -> u64 {
-        rook_attacks(flip_rank(square as usize), Bitboard(occupied)).swap_bytes()
+        rook_attacks(flip_rank(square as usize), Bitboard(occupied.swap_bytes())).swap_bytes()
     }
 
     fn queen_attacks(square: u64, occupied: u64) -> u64 {
-        queen_attacks(flip_rank(square as usize), Bitboard(occupied)).swap_bytes()
+        queen_attacks(flip_rank(square as usize), Bitboard(occupied.swap_bytes())).swap_bytes()
     }
 
     fn king_attacks(square: u64) -> u64 {
