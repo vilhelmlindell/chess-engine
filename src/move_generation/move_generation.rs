@@ -176,7 +176,7 @@ fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
 
     for to in attack_bitboard {
         if !board.king_attacked(from, to) && (enemy_king_square & KING_ATTACK_MASKS[to] == 0) {
-            moves.push(Move::new(from, to, MoveType::Normal));
+            unsafe { moves.push_unchecked(Move::new(from, to, MoveType::Normal)) };
         }
     }
 }
@@ -184,17 +184,17 @@ fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
 fn generate_castling_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     if IS_WHITE {
         if can_castle(board, WHITE_KINGSIDE_MASK, WHITE_KINGSIDE_SQUARES) && board.state().castling_rights[Side::White].kingside {
-            moves.push(Move::new(60, 62, MoveType::KingsideCastle));
+            unsafe { moves.push_unchecked(Move::new(60, 62, MoveType::KingsideCastle)) }
         }
         if can_castle(board, WHITE_QUEENSIDE_MASK, WHITE_QUEENSIDE_SQUARES) && board.state().castling_rights[Side::White].queenside {
-            moves.push(Move::new(60, 58, MoveType::QueensideCastle));
+            unsafe { moves.push_unchecked(Move::new(60, 58, MoveType::QueensideCastle)) }
         }
     } else {
         if can_castle(board, BLACK_KINGSIDE_MASK, BLACK_KINGSIDE_SQUARES) && board.state().castling_rights[Side::Black].kingside {
-            moves.push(Move::new(4, 6, MoveType::KingsideCastle));
+            unsafe { moves.push_unchecked(Move::new(4, 6, MoveType::KingsideCastle)) }
         }
         if can_castle(board, BLACK_QUEENSIDE_MASK, BLACK_QUEENSIDE_SQUARES) && board.state().castling_rights[Side::Black].queenside {
-            moves.push(Move::new(4, 2, MoveType::QueensideCastle));
+            unsafe { moves.push_unchecked(Move::new(4, 2, MoveType::QueensideCastle)) }
         }
     }
 }
@@ -213,11 +213,11 @@ fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board:
         if square2 != 64 {
             let move1 = Move::new(square, to, MoveType::EnPassant);
             if legal(board, move1.from(), move1.to()) {
-                moves.push(move1);
+                unsafe { moves.push_unchecked(move1) }
             }
             let move2 = Move::new(square2, to, MoveType::EnPassant);
             if legal(board, move2.from(), move2.to()) {
-                moves.push(move2);
+                unsafe { moves.push_unchecked(move2) }
             }
             return;
         }
@@ -229,7 +229,7 @@ fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board:
         if attackers == 0 {
             let mov = Move::new(square, to, MoveType::EnPassant);
             if legal(board, mov.from(), mov.to()) {
-                moves.push(mov);
+                unsafe { moves.push_unchecked(mov) }
             }
             return;
         }
@@ -239,7 +239,7 @@ fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board:
         if king & rank == 0 {
             let mov = Move::new(square, to, MoveType::EnPassant);
             if legal(board, mov.from(), mov.to()) {
-                moves.push(mov);
+                unsafe { moves.push_unchecked(mov) }
             }
             return;
         }
@@ -255,7 +255,7 @@ fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board:
         if expected_blockers != blockers {
             let mov = Move::new(square, to, MoveType::EnPassant);
             if legal(board, mov.from(), mov.to()) {
-                moves.push(mov);
+                unsafe { moves.push_unchecked(mov) }
             }
         }
     }
@@ -335,7 +335,7 @@ fn add_moves_from_bitboard<F: Fn(usize) -> Move>(mov: &F, moves: &mut ArrayVec<M
     for to in bitboard {
         let mov = mov(to);
         if legal(board, mov.from(), mov.to()) {
-            moves.push(mov);
+            unsafe { moves.push_unchecked(mov) }
         }
     }
 }
@@ -346,7 +346,7 @@ fn add_promotion_moves_from_bitboard<F: Fn(usize) -> usize>(from: &F, moves: &mu
         if legal(board, from, to) {
             for promotion_type in MoveType::PROMOTIONS {
                 let mov = Move::new(from, to, promotion_type);
-                moves.push(mov);
+                unsafe { moves.push_unchecked(mov) }
             }
         }
     }

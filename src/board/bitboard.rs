@@ -10,25 +10,32 @@ const NOT_H_FILE: u64 = 0x7f7f7f7f7f7f7f7f;
 pub struct Bitboard(pub u64);
 
 impl Bitboard {
+    #[inline(always)]
     pub fn from_square(square: usize) -> Self {
         Self(1 << square)
     }
 
-    pub fn bit(&self, n: usize) -> u64 {
+    #[inline(always)]
+    pub fn bit(self, n: usize) -> u64 {
         (self.0 >> n) & 1
     }
+    #[inline(always)]
     pub fn set_bit(&mut self, n: usize) {
         self.0 |= 1 << n;
     }
+    #[inline(always)]
     pub fn clear_bit(&mut self, n: usize) {
         self.0 &= !(1 << n);
     }
-    pub fn lsb(&self) -> usize {
+    #[inline(always)]
+    pub fn lsb(self) -> usize {
         self.trailing_zeros() as usize
     }
-    pub fn msb(&self) -> usize {
+    #[inline(always)]
+    pub fn msb(self) -> usize {
         63 - self.leading_zeros() as usize
     }
+    #[inline(always)]
     pub fn pop_lsb(&mut self) -> usize {
         let index = self.lsb();
         self.clear_bit(index);
@@ -40,47 +47,53 @@ impl Bitboard {
     //    index
     //}
 
-    pub const fn north(&self) -> Bitboard {
+    #[inline(always)]
+    pub const fn north(self) -> Bitboard {
         Bitboard(self.0 >> 8)
     }
-    pub const fn south(&self) -> Bitboard {
+    #[inline(always)]
+    pub const fn south(self) -> Bitboard {
         Bitboard(self.0 << 8)
     }
-    pub const fn west(&self) -> Bitboard {
+    #[inline(always)]
+    pub const fn west(self) -> Bitboard {
         Bitboard((self.0 >> 1) & NOT_H_FILE)
     }
-    pub const fn east(&self) -> Bitboard {
+    #[inline(always)]
+    pub const fn east(self) -> Bitboard {
         Bitboard((self.0 << 1) & NOT_A_FILE)
     }
-    pub const fn north_west(&self) -> Bitboard {
+    #[inline(always)]
+    pub const fn north_west(self) -> Bitboard {
         Bitboard((self.0 >> 9) & NOT_H_FILE)
     }
-    pub const fn north_east(&self) -> Bitboard {
+    #[inline(always)]
+    pub const fn north_east(self) -> Bitboard {
         Bitboard((self.0 >> 7) & NOT_A_FILE)
     }
-    pub const fn south_west(&self) -> Bitboard {
+    #[inline(always)]
+    pub const fn south_west(self) -> Bitboard {
         Bitboard((self.0 << 7) & NOT_H_FILE)
     }
-    pub const fn south_east(&self) -> Bitboard {
+    #[inline(always)]
+    pub const fn south_east(self) -> Bitboard {
         Bitboard((self.0 << 9) & NOT_A_FILE)
     }
-    pub const fn shift(&self, direction: Direction) -> Bitboard {
-        match direction {
-            Direction::North => self.north(),
-            Direction::South => self.south(),
-            Direction::West => self.west(),
-            Direction::East => self.east(),
-            Direction::NorthWest => self.north_west(),
-            Direction::NorthEast => self.north_east(),
-            Direction::SouthWest => self.south_west(),
-            Direction::SouthEast => self.south_east(),
-        }
-        //const DIRECTIONS: [fn(&self) -> Bitboard; 8] = [
-        //    Self::north, Self::south, Self::west, Self::east,
-        //    Self::north_west, Self::north_east, Self::south_west, Self::south_east
-        //];
+    #[inline(always)]
+    pub fn shift(self, direction: Direction) -> Bitboard {
+        //match direction {
+        //    Direction::North => self.north(),
+        //    Direction::South => self.south(),
+        //    Direction::West => self.west(),
+        //    Direction::East => self.east(),
+        //    Direction::NorthWest => self.north_west(),
+        //    Direction::NorthEast => self.north_east(),
+        //    Direction::SouthWest => self.south_west(),
+        //    Direction::SouthEast => self.south_east(),
+        //}
+        const DIRECTIONS: [fn(Bitboard) -> Bitboard; 8] = [Bitboard::north, Bitboard::west, Bitboard::north_west, Bitboard::north_east, Bitboard::south_west, Bitboard::south_east, Bitboard::east, Bitboard::south];
 
-        //DIRECTIONS[direction as usize](self)
+        DIRECTIONS[direction as usize](self)
     }
 }
 impl Iterator for Bitboard {
