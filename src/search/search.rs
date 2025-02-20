@@ -42,8 +42,8 @@ pub struct Search {
     pub result: SearchResult,
     pub max_time: u128,
     pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
-    pub pv: Vec<Move>,
-    pub should_quit: Arc<AtomicBool>, // Shared atomic flag
+    pub pv_table: [[Option<Move>; MAX_DEPTH]; MAX_DEPTH], // Initialize PV table
+    pub should_quit: Arc<AtomicBool>,             // Shared atomic flag
     pub root_ply: u32,
     pub has_searched_one_move: bool,
     pub syzygy: pyrrhic_rs::TableBases<Board>,
@@ -104,7 +104,7 @@ impl Default for Search {
             start_time: Instant::now(),
             max_time: 0,
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
-            pv: Vec::with_capacity(MAX_DEPTH),
+            pv_table: [[None; MAX_DEPTH]; MAX_DEPTH],
             should_quit: Arc::new(AtomicBool::new(false)),
             syzygy: pyrrhic_rs::TableBases::<Board>::new("./syzygy/tb345").unwrap(),
             has_searched_one_move: false,
@@ -125,7 +125,6 @@ impl Search {
         }
 
         self.params = search_params;
-        self.pv.clear();
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
         self.root_ply = board.ply;
@@ -208,7 +207,7 @@ impl Search {
                 break;
             }
 
-            let new_pv = self.extract_pv(depth, board);
+            let new_pv = self.extract_pv(depth);
 
             // Aspiration windows for deeper searches
             if depth >= 4 {
@@ -396,6 +395,10 @@ impl Search {
                 if eval > alpha {
                     evaluation_bound = NodeType::Exact;
                     alpha = eval;
+                    self.pv_table[ply as usize][ply as usize] = best_move;
+                    for i in (ply + 1)..MAX_DEPTH as u32 {
+                        self.pv_table[ply as usize][i as usize] = self.pv_table[(ply + 1) as usize][i as usize];
+                    }
                 }
             }
 
@@ -479,28 +482,14 @@ impl Search {
         false
     }
 
-    pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
-        let mut current_hash = board.zobrist_hash;
+    pub fn extract_pv(&self, depth: u32) -> Vec<Move> {
         let mut pv = Vec::new();
-        let mut i = 0;
-
-        while let Some(entry) = board.transposition_table.probe(current_hash) {
-            if entry.hash != current_hash || i >= depth {
+        for i in 0..depth as usize {
+            if let Some(mov) = self.pv_table[0][i] {
+                pv.push(mov);
+            } else {
                 break;
             }
-
-            let pv_move = entry.best_move;
-            pv.push(pv_move);
-
-            // Make the move on the board to get the next position
-            board.make_move(pv_move);
-            current_hash = board.zobrist_hash;
-            i += 1;
-        }
-
-        // Unmake all the moves to restore the original board state
-        for &mov in pv.iter().rev() {
-            board.unmake_move(mov);
         }
         pv
     }
@@ -512,8 +501,8 @@ impl Search {
     // TODO: Just realized this is incredibly inefficient, get_move_score is slow already and is
     // being called multiple times on the same move in the same sort.
     fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
-        if let Some(pv_mov) = self.pv.get(ply as usize) {
-            if mov == *pv_mov {
+        if let Some(pv_mov) = self.pv_table[ply as usize][ply as usize] {
+            if mov == pv_mov {
                 return MAX_EVAL;
             }
         }
