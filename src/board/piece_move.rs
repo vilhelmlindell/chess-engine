@@ -54,7 +54,7 @@ impl Move {
         (self.bits & 0b111111) as Square
     }
     pub fn to(&self) -> Square {
-        ((self.bits & 0b111111000000) >> 6) as Square
+        ((self.bits >> 6) & 0b111111) as Square
     }
     pub fn move_type(&self) -> MoveType {
         unsafe { MoveType::unchecked_transmute_from(((self.bits & 0b1111000000000000) >> 12) as u8) }

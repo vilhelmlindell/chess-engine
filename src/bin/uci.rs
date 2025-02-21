@@ -7,7 +7,9 @@ use std::time::Instant;
 use std::sync::mpsc;
 
 use chess_engine::bench;
+use chess_engine::board::zobrist_hash::initialize_zobrist_tables;
 use chess_engine::board::{Board, Side};
+use chess_engine::move_generation::attack_tables::initialize_tables;
 use chess_engine::move_generation::generate_moves;
 use chess_engine::perft::perft;
 use chess_engine::search::{Search, SearchMode, SearchParams, SearchResult};

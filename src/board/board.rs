@@ -3,15 +3,17 @@ use super::direction::Direction;
 use super::piece::{Piece, PieceType};
 use super::piece_move::{Move, MoveType, Square};
 use super::utils::flip_rank;
-use super::zobrist_hash::{get_zobrist_hash, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE_TO_MOVE, ZOBRIST_SQUARES};
+use super::zobrist_hash::{
+    get_zobrist_castling_rights, get_zobrist_en_passant_square, get_zobrist_hash, get_zobrist_side, get_zobrist_squares, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE, ZOBRIST_SQUARES
+};
 use crate::evaluation::piece_square_tables::{endgame_position_value, midgame_position_value};
 use crate::move_generation::attack_tables::*;
 use crate::search::transposition_table::*;
 use num_enum::UnsafeFromPrimitive;
+use pyrrhic_rs::EngineAdapter;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
-use pyrrhic_rs::EngineAdapter;
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -255,7 +257,7 @@ impl Board {
         }
 
         let castling_rights_bits_after = Self::castling_rights_bits(state.castling_rights);
-        self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
+        self.zobrist_hash ^= get_zobrist_castling_rights(castling_rights_bits_before) ^ get_zobrist_castling_rights(castling_rights_bits_after);
 
         if let Some(captured_piece) = self.squares[mov.to()] {
             self.clear_square(mov.to());
@@ -271,7 +273,7 @@ impl Board {
 
         if let Some(prev_en_passant_square) = self.state().en_passant_square {
             let prev_file = prev_en_passant_square % 8;
-            self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+            self.zobrist_hash ^= get_zobrist_en_passant_square(prev_file);
         }
 
         self.move_piece(mov.from(), mov.to());
@@ -291,7 +293,7 @@ impl Board {
             MoveType::DoublePush => {
                 state.en_passant_square = Some((mov.to() as i32 + Direction::down(self.side).value()) as usize);
                 let file = state.en_passant_square.unwrap() % 8;
-                self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[file];
+                self.zobrist_hash ^= get_zobrist_en_passant_square(file);
             }
             MoveType::EnPassant => {
                 let en_passant_square = self.state().en_passant_square.unwrap();
@@ -309,7 +311,7 @@ impl Board {
         }
 
         self.side = self.side.enemy();
-        self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
+        self.zobrist_hash ^= get_zobrist_side();
         self.absolute_pinned_squares = self.absolute_pins();
 
         if self.state().halfmove_clock != 0 {
@@ -321,7 +323,7 @@ impl Board {
     pub fn unmake_move(&mut self, mov: Move) {
         self.ply -= 1;
         self.side = self.side.enemy();
-        self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
+        self.zobrist_hash ^= get_zobrist_side();
 
         let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
 
@@ -344,7 +346,7 @@ impl Board {
             }
             MoveType::DoublePush => {
                 let file = self.state().en_passant_square.unwrap() % 8;
-                self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[file];
+                self.zobrist_hash ^= get_zobrist_en_passant_square(file);
             }
             MoveType::EnPassant => {
                 let square = (self.states[self.states.len() - 2].en_passant_square.unwrap() as i32 + Direction::down(self.side).value()) as usize;
@@ -366,10 +368,10 @@ impl Board {
 
         if let Some(prev_en_passant_square) = self.state().en_passant_square {
             let prev_file = prev_en_passant_square % 8;
-            self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+            self.zobrist_hash ^= get_zobrist_en_passant_square(prev_file);
         }
 
-        self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
+        self.zobrist_hash ^= get_zobrist_castling_rights(castling_rights_bits_before) ^ get_zobrist_castling_rights(castling_rights_bits_after);
     }
     pub fn make_null_move(&mut self) {
         let state = BoardState::from_state(self.state());
@@ -377,15 +379,15 @@ impl Board {
         let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
 
         let castling_rights_bits_after = Self::castling_rights_bits(state.castling_rights);
-        self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
+        self.zobrist_hash ^= get_zobrist_castling_rights(castling_rights_bits_before) ^ get_zobrist_castling_rights(castling_rights_bits_after);
 
         if let Some(prev_en_passant_square) = self.state().en_passant_square {
             let prev_file = prev_en_passant_square % 8;
-            self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+            self.zobrist_hash ^= get_zobrist_en_passant_square(prev_file);
         }
 
         self.side = self.side.enemy();
-        self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
+        self.zobrist_hash ^= get_zobrist_side();
         self.absolute_pinned_squares = self.absolute_pins();
 
         self.ply += 1;
@@ -395,7 +397,7 @@ impl Board {
     pub fn unmake_null_move(&mut self) {
         self.ply -= 1;
         self.side = self.side.enemy();
-        self.zobrist_hash ^= *ZOBRIST_SIDE_TO_MOVE;
+        self.zobrist_hash ^= get_zobrist_side();
 
         let castling_rights_bits_before = Self::castling_rights_bits(self.state().castling_rights);
 
@@ -406,19 +408,19 @@ impl Board {
 
         if let Some(prev_en_passant_square) = self.state().en_passant_square {
             let prev_file = prev_en_passant_square % 8;
-            self.zobrist_hash ^= ZOBRIST_EN_PASSANT_SQUARE[prev_file];
+            self.zobrist_hash ^= get_zobrist_en_passant_square(prev_file);
         }
 
-        self.zobrist_hash ^= ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_before] ^ ZOBRIST_CASTLING_RIGHTS[castling_rights_bits_after];
+        self.zobrist_hash ^= get_zobrist_castling_rights(castling_rights_bits_before) ^ get_zobrist_castling_rights(castling_rights_bits_after);
     }
     #[inline(always)]
     pub fn attacked(&self, square: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
-        if (PAWN_ATTACKS[self.side.enemy()][square] & pawns).0 != 0 {
+        if (get_pawn_attack(self.side.enemy(), square) & pawns).0 != 0 {
             return true;
         }
         let knights = self.piece_squares[Piece::new(PieceType::Knight, self.side.enemy())];
-        if (KNIGHT_ATTACK_MASKS[square] & knights).0 != 0 {
+        if (get_knight_attack_mask(square) & knights).0 != 0 {
             return true;
         }
         let queens = self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())];
@@ -437,10 +439,10 @@ impl Board {
         let mut attackers = Bitboard(0);
 
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, side.enemy())];
-        attackers |= PAWN_ATTACKS[side.enemy()][square] & pawns;
+        attackers |= get_pawn_attack(side.enemy(), square) & pawns;
 
         let knights = self.piece_squares[Piece::new(PieceType::Knight, side.enemy())];
-        attackers |= KNIGHT_ATTACK_MASKS[square] & knights;
+        attackers |= get_knight_attack_mask(square) & knights;
 
         let queens = self.piece_squares[Piece::new(PieceType::Queen, side.enemy())];
 
@@ -462,11 +464,11 @@ impl Board {
     #[inline(always)]
     pub fn king_attacked(&self, from: usize, to: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
-        if (PAWN_ATTACKS[self.side.enemy()][to] & pawns).0 != 0 {
+        if (get_pawn_attack(self.side.enemy(), to) & pawns).0 != 0 {
             return true;
         }
         let knights = self.piece_squares[Piece::new(PieceType::Knight, self.side.enemy())];
-        if (KNIGHT_ATTACK_MASKS[to] & knights).0 != 0 {
+        if (get_knight_attack_mask(to) & knights).0 != 0 {
             return true;
         }
         let queens = self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())];
@@ -483,7 +485,7 @@ impl Board {
     }
     #[inline(always)]
     pub fn aligned(square1: usize, square2: usize, square3: usize) -> bool {
-        LINE_RAYS[square1][square2] & Bitboard::from_square(square3) != 0
+        get_line_ray(square1, square2) & Bitboard::from_square(square3) != 0
     }
     fn initialize_bitboards(&mut self) {
         for square in 0..64 {
@@ -514,7 +516,7 @@ impl Board {
         self.endgame_position_balance += endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance += piece.piece_type().centipawns() * piece.side().factor();
         self.total_material += piece.piece_type().standard_value();
-        self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
+        self.zobrist_hash ^= get_zobrist_squares(square, piece);
     }
 
     #[inline(always)]
@@ -528,7 +530,7 @@ impl Board {
         self.endgame_position_balance -= endgame_position_value(piece.piece_type(), square, piece.side()) * piece.side().factor();
         self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
         self.total_material -= piece.piece_type().standard_value();
-        self.zobrist_hash ^= ZOBRIST_SQUARES[square][piece as usize];
+        self.zobrist_hash ^= get_zobrist_squares(square, piece);
     }
     #[inline(always)]
     fn absolute_pins(&self) -> Bitboard {
@@ -540,7 +542,7 @@ impl Board {
 
         while pinners != 0 {
             let pinner_square = pinners.pop_lsb();
-            pinned_squares |= BETWEEN_RAYS[king_square][pinner_square] & self.friendly_squares();
+            pinned_squares |= get_between_ray(king_square, pinner_square) & self.friendly_squares();
         }
 
         pinners = self.xray_bishop_attacks(king_square, self.friendly_squares())
@@ -548,7 +550,7 @@ impl Board {
 
         while pinners != 0 {
             let pinner_square = pinners.pop_lsb();
-            pinned_squares |= BETWEEN_RAYS[king_square][pinner_square] & self.friendly_squares();
+            pinned_squares |= get_between_ray(king_square, pinner_square) & self.friendly_squares();
         }
 
         pinned_squares
@@ -580,14 +582,14 @@ impl Board {
 impl EngineAdapter for Board {
     fn pawn_attacks(color: pyrrhic_rs::Color, square: u64) -> u64 {
         if color == pyrrhic_rs::Color::White {
-            PAWN_ATTACKS[Side::Black][flip_rank(square as usize)].swap_bytes()
+            get_pawn_attack(Side::Black, flip_rank(square as usize)).swap_bytes()
         } else {
-            PAWN_ATTACKS[Side::White][flip_rank(square as usize)].swap_bytes()
+            get_pawn_attack(Side::White, flip_rank(square as usize)).swap_bytes()
         }
     }
 
     fn knight_attacks(square: u64) -> u64 {
-        KNIGHT_ATTACK_MASKS[flip_rank(square as usize)].swap_bytes()
+        get_knight_attack_mask(flip_rank(square as usize)).swap_bytes()
     }
 
     fn bishop_attacks(square: u64, occupied: u64) -> u64 {
@@ -603,7 +605,7 @@ impl EngineAdapter for Board {
     }
 
     fn king_attacks(square: u64) -> u64 {
-        KING_ATTACK_MASKS[flip_rank(square as usize)].swap_bytes()
+        get_king_attack_mask(flip_rank(square as usize)).swap_bytes()
     }
 }
 
@@ -777,12 +779,12 @@ mod tests {
         squares[62] = Some(Piece::new(PieceType::Knight, Side::White));
         squares[63] = Some(Piece::new(PieceType::Rook, Side::White));
 
-        let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - -");
+        let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1");
         assert_eq!(squares, board.squares);
     }
     #[test]
     fn sets_correct_bitboards_from_squares() {
-        let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - -");
+        let board = Board::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1");
         let white_pawn_bitboard = board.piece_squares[Piece::new(PieceType::Pawn, Side::White)];
         assert_eq!(white_pawn_bitboard.0, 0x00FF000000000000)
     }

@@ -2,7 +2,7 @@ use crate::board::bitboard::Bitboard;
 use crate::board::piece::{Piece, PieceType};
 use crate::board::piece_move::{Move, MoveType};
 use crate::board::Board;
-use crate::move_generation::attack_tables::BETWEEN_RAYS;
+use crate::move_generation::attack_tables::get_between_ray;
 use crate::move_generation::generate_moves;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -80,13 +80,13 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
 fn search(depth: u32, prev_mov: Move, board: &mut Board) -> PerftResult {
     let moves = generate_moves(board);
 
-    if depth == 0 {
-        return PerftResult { nodes: 1 , ..Default::default() };
-    }
-
-    //if depth == 1 {
-    //    return PerftResult { nodes: moves.len() as u64, ..Default::default() };
+    //if depth == 0 {
+    //    return PerftResult { nodes: 1 , ..Default::default() };
     //}
+
+    if depth == 1 {
+        return PerftResult { nodes: moves.len() as u64, ..Default::default() };
+    }
 
     let mut result = PerftResult::default();
 
@@ -120,7 +120,7 @@ fn get_move_info(mov: Move, board: &Board, extra_info: bool) -> PerftResult {
             info.checks = 1;
             while attackers != 0 {
                 let attacker_square = attackers.pop_lsb();
-                if Bitboard::from_square(mov.from()) & BETWEEN_RAYS[attacker_square][king_square] != 0 {
+                if Bitboard::from_square(mov.from()) & get_between_ray(attacker_square, king_square) != 0 {
                     info.discovered_checks = 1;
                 }
             }

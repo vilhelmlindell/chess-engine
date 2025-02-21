@@ -41,9 +41,6 @@ pub struct Search {
 }
 
 impl Search {
-}
-
-impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
         self.result = SearchResult::default();
@@ -134,6 +131,8 @@ impl Search {
         self.result.clone()
     }
     fn pvs<const ALLOW_NULL_MOVE: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
+        self.result.nodes += 1;
+
         if self.should_quit(depth) {
             return 0;
         }
@@ -141,8 +140,6 @@ impl Search {
         if self.is_draw(board) {
             return 0;
         }
-
-        self.result.nodes += 1;
 
         if depth == 0 {
             return self.quiescence_search(board, alpha, beta, ply);
@@ -274,6 +271,8 @@ impl Search {
     }
 
     fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
+        self.result.nodes += 1;
+
         if self.should_quit(ply) {
             return 0;
         }
@@ -293,8 +292,6 @@ impl Search {
         if moves.is_empty() {
             return stand_pat;
         }
-
-        self.result.nodes += 1;
 
         self.order_moves::<true>(board, &mut moves, ply);
 
