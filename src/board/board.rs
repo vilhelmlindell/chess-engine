@@ -3,9 +3,7 @@ use super::direction::Direction;
 use super::piece::{Piece, PieceType};
 use super::piece_move::{Move, MoveType, Square};
 use super::utils::flip_rank;
-use super::zobrist_hash::{
-    get_zobrist_castling_rights, get_zobrist_en_passant_square, get_zobrist_hash, get_zobrist_side, get_zobrist_squares, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE, ZOBRIST_SQUARES
-};
+use super::zobrist_hash::{get_zobrist_castling_rights, get_zobrist_en_passant_square, get_zobrist_hash, get_zobrist_side, get_zobrist_squares, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE, ZOBRIST_SQUARES};
 use crate::evaluation::piece_square_tables::{endgame_position_value, midgame_position_value};
 use crate::move_generation::attack_tables::*;
 use crate::search::transposition_table::*;
@@ -26,11 +24,7 @@ pub const RANK_6: Bitboard = Bitboard(0x0000000000FF0000);
 pub const RANK_7: Bitboard = Bitboard(0x000000000000FF00);
 pub const RANK_8: Bitboard = Bitboard(0x00000000000000FF);
 pub const RANKS: [Bitboard; 8] = [RANK_1, RANK_2, RANK_3, RANK_4, RANK_5, RANK_6, RANK_7, RANK_8];
-pub const TOTAL_MATERIAL_STARTPOS: u32 = 16 * PieceType::Pawn.standard_value()
-    + 4 * PieceType::Knight.standard_value()
-    + 4 * PieceType::Bishop.standard_value()
-    + 4 * PieceType::Rook.standard_value()
-    + 2 * PieceType::Queen.standard_value();
+pub const TOTAL_MATERIAL_STARTPOS: u32 = 16 * PieceType::Pawn.standard_value() + 4 * PieceType::Knight.standard_value() + 4 * PieceType::Bishop.standard_value() + 4 * PieceType::Rook.standard_value() + 2 * PieceType::Queen.standard_value();
 
 const BLACK_QUEENSIDE_START_MASK: Bitboard = Bitboard((1 << 0) | (1 << 4)); // a8 and e8
 const BLACK_KINGSIDE_START_MASK: Bitboard = Bitboard((1 << 7) | (1 << 4)); // h8 and e8
@@ -75,14 +69,7 @@ impl Board {
     }
     pub fn fen(&self) -> String {
         let mut fen = "".to_string();
-        let piece_types = HashMap::from([
-            (PieceType::Pawn, 'p'),
-            (PieceType::Knight, 'n'),
-            (PieceType::Bishop, 'b'),
-            (PieceType::Rook, 'r'),
-            (PieceType::Queen, 'q'),
-            (PieceType::King, 'k'),
-        ]);
+        let piece_types = HashMap::from([(PieceType::Pawn, 'p'), (PieceType::Knight, 'n'), (PieceType::Bishop, 'b'), (PieceType::Rook, 'r'), (PieceType::Queen, 'q'), (PieceType::King, 'k')]);
         for rank in 0..8 {
             let mut empty = 0;
             for file in 0..8 {
@@ -166,14 +153,7 @@ impl Board {
     }
 
     pub fn load_fen(&mut self, fen: &str) {
-        let piece_types = HashMap::from([
-            ('p', PieceType::Pawn),
-            ('n', PieceType::Knight),
-            ('b', PieceType::Bishop),
-            ('r', PieceType::Rook),
-            ('q', PieceType::Queen),
-            ('k', PieceType::King),
-        ]);
+        let piece_types = HashMap::from([('p', PieceType::Pawn), ('n', PieceType::Knight), ('b', PieceType::Bishop), ('r', PieceType::Rook), ('q', PieceType::Queen), ('k', PieceType::King)]);
         let fields: Vec<&str> = fen.split(' ').collect();
         let ranks: Vec<&str> = fields.first().unwrap().split('/').collect();
         for (rank, rank_string) in ranks.iter().enumerate() {
@@ -537,16 +517,14 @@ impl Board {
         let king_square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
 
         let mut pinned_squares = Bitboard(0);
-        let mut pinners = self.xray_rook_attacks(king_square, self.friendly_squares())
-            & (self.piece_squares[Piece::new(PieceType::Rook, self.side.enemy())] | self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())]);
+        let mut pinners = self.xray_rook_attacks(king_square, self.friendly_squares()) & (self.piece_squares[Piece::new(PieceType::Rook, self.side.enemy())] | self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())]);
 
         while pinners != 0 {
             let pinner_square = pinners.pop_lsb();
             pinned_squares |= get_between_ray(king_square, pinner_square) & self.friendly_squares();
         }
 
-        pinners = self.xray_bishop_attacks(king_square, self.friendly_squares())
-            & (self.piece_squares[Piece::new(PieceType::Bishop, self.side.enemy())] | self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())]);
+        pinners = self.xray_bishop_attacks(king_square, self.friendly_squares()) & (self.piece_squares[Piece::new(PieceType::Bishop, self.side.enemy())] | self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())]);
 
         while pinners != 0 {
             let pinner_square = pinners.pop_lsb();
@@ -569,10 +547,7 @@ impl Board {
     }
     #[inline(always)]
     fn castling_rights_bits(castling_rights: [CastlingRights; 2]) -> usize {
-        (castling_rights[Side::White].kingside as usize) << 3
-            | (castling_rights[Side::White].queenside as usize) << 2
-            | (castling_rights[Side::Black].kingside as usize) << 1
-            | castling_rights[Side::Black].queenside as usize
+        (castling_rights[Side::White].kingside as usize) << 3 | (castling_rights[Side::White].queenside as usize) << 2 | (castling_rights[Side::Black].kingside as usize) << 1 | castling_rights[Side::Black].queenside as usize
     }
 }
 
@@ -635,14 +610,7 @@ impl Default for Board {
 
 impl Display for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let piece_chars = HashMap::from([
-            (PieceType::Pawn, 'p'),
-            (PieceType::Knight, 'n'),
-            (PieceType::Bishop, 'b'),
-            (PieceType::Rook, 'r'),
-            (PieceType::Queen, 'q'),
-            (PieceType::King, 'k'),
-        ]);
+        let piece_chars = HashMap::from([(PieceType::Pawn, 'p'), (PieceType::Knight, 'n'), (PieceType::Bishop, 'b'), (PieceType::Rook, 'r'), (PieceType::Queen, 'q'), (PieceType::King, 'k')]);
         for rank in 0..8 {
             write!(f, "{}", 8 - rank).unwrap();
             for file in 0..8 {
