@@ -99,30 +99,37 @@ impl Search {
 
             let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
+            // Don't update results if search was interrupted
+            if self.should_quit(depth) {
+                break;
+            }
+
+            let mut new_pv = self.extract_pv(depth, board);
+
             // Aspiration windows for deeper searches
-            // if depth >= 4 {
-            //     let window = 50;
-            //     let mut alpha = eval - window;
-            //     let mut beta = eval + window;
+            if depth >= 4 {
+                let window = 50;
+                let mut alpha = eval - window;
+                let mut beta = eval + window;
 
-            //     loop {
-            //         let score = self.pvs::<true>(board, depth, alpha, beta, 0);
+                loop {
+                    let score = self.pvs::<true>(board, depth, alpha, beta, 0);
 
-            //         if score <= alpha {
-            //             alpha = -MAX_EVAL;
-            //         } else if score >= beta {
-            //             beta = MAX_EVAL;
-            //         } else {
-            //             break;
-            //         }
-            //     }
-            // }
+                    if score <= alpha {
+                        alpha = -MAX_EVAL;
+                    } else if score >= beta {
+                        beta = MAX_EVAL;
+                    } else {
+                        break;
+                    }
+                }
+            }
 
-            self.pv = self.extract_pv(depth, board);
+            new_pv = self.extract_pv(depth, board);
 
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
-            self.result.pv = self.pv.clone();
+            self.result.pv = new_pv;
             self.result.time = self.start_time.elapsed();
 
             Search::print_info(&self.result);
