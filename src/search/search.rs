@@ -1,3 +1,5 @@
+use pyrrhic_rs::DtzProbeResult;
+
 use crate::board::bitboard::Bitboard;
 use crate::board::piece::{Piece, PieceType};
 use crate::board::piece_move::{Move, MoveType};
@@ -15,7 +17,7 @@ use std::simd::num::SimdUint;
 use std::simd::u64x8;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 pub const MAX_DEPTH: usize = 100;
 pub const KILLER_MOVE_SLOTS: usize = 3;
@@ -23,93 +25,22 @@ pub const KILLER_MOVE_SLOTS: usize = 3;
 const HASH_MOVE_SCORE: i32 = 4000;
 const CAPTURE_BASE_SCORE: i32 = 1000;
 const KILLER_MOVE_SCORE: i32 = 800;
-
 const MAX_EVAL: i32 = 1000000;
-
-#[derive(PartialEq, Copy, Clone, Default)]
-pub struct SearchParams {
-    pub depth: Option<u32>, // Maximum depth to search to
-    //pub nodes: usize,            // Maximum number of nodes to search
-    pub move_time: u128,         // Maximum time per move to search
-    pub clock: Clock,            // Time available for entire game
-    pub search_mode: SearchMode, // Defines the mode to search in
-    pub use_book: bool,
-    //pub quiet: bool,             // No intermediate search stats updates
-}
 
 pub struct Search {
     pub params: SearchParams,
     pub result: SearchResult,
     pub max_time: u128,
     pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
-    pub pv_table: [[Option<Move>; MAX_DEPTH]; MAX_DEPTH], // Initialize PV table
-    pub should_quit: Arc<AtomicBool>,             // Shared atomic flag
+    pub pv: Vec<Move>,
+    pub should_quit: Arc<AtomicBool>, // Shared atomic flag
     pub root_ply: u32,
     pub has_searched_one_move: bool,
     pub syzygy: pyrrhic_rs::TableBases<Board>,
-    start_time: Instant,
+    pub start_time: Instant,
 }
 
 impl Search {
-    pub fn should_quit(&self, ply: u32) -> bool {
-        if self.start_time.elapsed().as_millis() > self.max_time {
-            return true;
-        }
-        if let Some(max_depth) = self.params.depth {
-            if ply > max_depth {
-                return true;
-            }
-        }
-        return self.should_quit.load(std::sync::atomic::Ordering::Relaxed);
-    }
-}
-
-#[derive(PartialEq, Copy, Clone, Default)]
-pub struct Clock {
-    pub time: [u128; 2],            // Time on the clock in milliseconds
-    pub inc: [u128; 2],             // Time increment in milliseconds
-    pub moves_to_go: Option<usize>, // Moves to go to next time control (0 = sudden death)
-}
-
-#[derive(PartialEq, Copy, Clone)]
-pub enum SearchMode {
-    Infinite,
-    MoveTime,
-    Clock,
-}
-
-impl Default for SearchMode {
-    fn default() -> Self {
-        Self::Infinite
-    }
-}
-
-#[derive(Default, Clone)]
-pub struct SearchResult {
-    //pub best_move: Option<Move>,
-    pub pv: Vec<Move>,
-    pub highest_eval: i32,
-    pub depth_reached: u32,
-    pub nodes: u32,
-    pub transpositions: u32,
-    pub time: u128,
-}
-
-impl Default for Search {
-    fn default() -> Self {
-        Self {
-            params: SearchParams::default(),
-            result: SearchResult::default(),
-            root_ply: 0,
-            start_time: Instant::now(),
-            max_time: 0,
-            killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
-            pv_table: [[None; MAX_DEPTH]; MAX_DEPTH],
-            should_quit: Arc::new(AtomicBool::new(false)),
-            syzygy: pyrrhic_rs::TableBases::<Board>::new("./syzygy/tb345").unwrap(),
-            has_searched_one_move: false,
-        }
-    }
 }
 
 impl Search {
@@ -130,38 +61,7 @@ impl Search {
         self.root_ply = board.ply;
 
         if board.occupied_squares.count_ones() <= 5 {
-            let mut bitboards = u64x8::from_array([
-                *board.side_squares[Side::White],
-                *board.side_squares[Side::Black],
-                *(board.piece_squares[Piece::WhiteKing] | board.piece_squares[Piece::BlackKing]),
-                *(board.piece_squares[Piece::WhiteQueen] | board.piece_squares[Piece::BlackQueen]),
-                *(board.piece_squares[Piece::WhiteRook] | board.piece_squares[Piece::BlackRook]),
-                *(board.piece_squares[Piece::WhiteBishop] | board.piece_squares[Piece::BlackBishop]),
-                *(board.piece_squares[Piece::WhiteKnight] | board.piece_squares[Piece::BlackKnight]),
-                *(board.piece_squares[Piece::WhitePawn] | board.piece_squares[Piece::BlackPawn]),
-            ]);
-            bitboards = bitboards.swap_bytes();
-            //for bitboard in bitboards.to_array().iter() {
-            //    println!("{}", Bitboard(*bitboard));
-            //}
-            //println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
-            //println!("ep {}", board.state().halfmove_clock as u32 / 2);
-            let result = self
-                .syzygy
-                .probe_root(
-                    bitboards[0],
-                    bitboards[1],
-                    bitboards[2],
-                    bitboards[3],
-                    bitboards[4],
-                    bitboards[5],
-                    bitboards[6],
-                    bitboards[7],
-                    board.state().halfmove_clock as u32 / 2,
-                    flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32,
-                    board.side.value() == 0,
-                )
-                .expect("Syzygy tablebase probe failed");
+            let result = self.probe_syzygy_root(board);
             match result.root {
                 pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
                 pyrrhic_rs::DtzProbeValue::Checkmate => return self.result.clone(),
@@ -202,15 +102,8 @@ impl Search {
 
             let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
-            // Don't update results if search was interrupted
-            if self.should_quit(depth) {
-                break;
-            }
-
-            let new_pv = self.extract_pv(depth);
-
             // Aspiration windows for deeper searches
-            if depth >= 4 {
+            if depth >= 3 {
                 let window = 50;
                 let mut alpha = eval - window;
                 let mut beta = eval + window;
@@ -228,37 +121,33 @@ impl Search {
                 }
             }
 
-            // Store results
+            self.pv = self.extract_pv(depth, board);
+
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
-            self.result.pv = new_pv;
-            self.result.time = self.start_time.elapsed().as_millis();
+            self.result.pv = self.pv.clone();
+            self.result.time = self.start_time.elapsed();
 
             Search::print_info(&self.result);
         }
 
         self.result.clone()
     }
-
     fn pvs<const ALLOW_NULL_MOVE: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
         if self.should_quit(depth) {
             return 0;
         }
 
-        // Check for draws first
         if self.is_draw(board) {
             return 0;
         }
 
         self.result.nodes += 1;
 
-        // Leaf node reached, run quiescence search
         if depth == 0 {
-            //return evaluate(board);
             return self.quiescence_search(board, alpha, beta, ply);
         }
 
-        // Transposition table lookup
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
             if entry.hash == board.zobrist_hash && entry.depth >= depth {
                 self.result.transpositions += 1;
@@ -276,39 +165,7 @@ impl Search {
         }
 
         if board.occupied_squares.count_ones() <= 5 {
-            let mut bitboards = u64x8::from_array([
-                *board.side_squares[Side::White],
-                *board.side_squares[Side::Black],
-                *(board.piece_squares[Piece::WhiteKing] | board.piece_squares[Piece::BlackKing]),
-                *(board.piece_squares[Piece::WhiteQueen] | board.piece_squares[Piece::BlackQueen]),
-                *(board.piece_squares[Piece::WhiteRook] | board.piece_squares[Piece::BlackRook]),
-                *(board.piece_squares[Piece::WhiteBishop] | board.piece_squares[Piece::BlackBishop]),
-                *(board.piece_squares[Piece::WhiteKnight] | board.piece_squares[Piece::BlackKnight]),
-                *(board.piece_squares[Piece::WhitePawn] | board.piece_squares[Piece::BlackPawn]),
-            ]);
-            bitboards = bitboards.swap_bytes();
-            //for bitboard in bitboards.to_array().iter() {
-            //    println!("{}", Bitboard(*bitboard));
-            //}
-            //println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
-            //println!("halfmove {}", board.state().halfmove_clock as u32 / 2);
-            //println!("fen {}", board.fen());
-            let result = self
-                .syzygy
-                .probe_root(
-                    bitboards[0],
-                    bitboards[1],
-                    bitboards[2],
-                    bitboards[3],
-                    bitboards[4],
-                    bitboards[5],
-                    bitboards[6],
-                    bitboards[7],
-                    board.state().halfmove_clock as u32 / 2,
-                    flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32,
-                    board.side.value() == 0,
-                )
-                .expect("Syzygy tablebase probe failed");
+            let result = self.probe_syzygy_root(board);
             match result.root {
                 pyrrhic_rs::DtzProbeValue::Stalemate => return 0,
                 pyrrhic_rs::DtzProbeValue::Checkmate => {
@@ -395,10 +252,6 @@ impl Search {
                 if eval > alpha {
                     evaluation_bound = NodeType::Exact;
                     alpha = eval;
-                    self.pv_table[ply as usize][ply as usize] = best_move;
-                    for i in (ply + 1)..MAX_DEPTH as u32 {
-                        self.pv_table[ply as usize][i as usize] = self.pv_table[(ply + 1) as usize][i as usize];
-                    }
                 }
             }
 
@@ -459,6 +312,42 @@ impl Search {
         alpha
     }
 
+    fn probe_syzygy_root(&mut self, board: &Board) -> DtzProbeResult {
+        let mut bitboards = u64x8::from_array([
+            *board.side_squares[Side::White],
+            *board.side_squares[Side::Black],
+            *(board.piece_squares[Piece::WhiteKing] | board.piece_squares[Piece::BlackKing]),
+            *(board.piece_squares[Piece::WhiteQueen] | board.piece_squares[Piece::BlackQueen]),
+            *(board.piece_squares[Piece::WhiteRook] | board.piece_squares[Piece::BlackRook]),
+            *(board.piece_squares[Piece::WhiteBishop] | board.piece_squares[Piece::BlackBishop]),
+            *(board.piece_squares[Piece::WhiteKnight] | board.piece_squares[Piece::BlackKnight]),
+            *(board.piece_squares[Piece::WhitePawn] | board.piece_squares[Piece::BlackPawn]),
+        ]);
+        bitboards = bitboards.swap_bytes();
+        //for bitboard in bitboards.to_array().iter() {
+        //    println!("{}", Bitboard(*bitboard));
+        //}
+        //println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
+        //println!("halfmove {}", board.state().halfmove_clock as u32 / 2);
+        //println!("fen {}", board.fen());
+        return self
+            .syzygy
+            .probe_root(
+                bitboards[0],
+                bitboards[1],
+                bitboards[2],
+                bitboards[3],
+                bitboards[4],
+                bitboards[5],
+                bitboards[6],
+                bitboards[7],
+                board.state().halfmove_clock as u32 / 2,
+                flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32,
+                board.side.value() == 0,
+            )
+            .expect("Syzygy tablebase probe failed");
+    }
+
     fn is_draw(&self, board: &Board) -> bool {
         if board.state().halfmove_clock >= 100 {
             return true;
@@ -482,14 +371,28 @@ impl Search {
         false
     }
 
-    pub fn extract_pv(&self, depth: u32) -> Vec<Move> {
+    pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
+        let mut current_hash = board.zobrist_hash;
         let mut pv = Vec::new();
-        for i in 0..depth as usize {
-            if let Some(mov) = self.pv_table[0][i] {
-                pv.push(mov);
-            } else {
+        let mut i = 0;
+
+        while let Some(entry) = board.transposition_table.probe(current_hash) {
+            if entry.hash != current_hash || i >= depth {
                 break;
             }
+
+            let pv_move = entry.best_move;
+            pv.push(pv_move);
+
+            // Make the move on the board to get the next position
+            board.make_move(pv_move);
+            current_hash = board.zobrist_hash;
+            i += 1;
+        }
+
+        // Unmake all the moves to restore the original board state
+        for &mov in pv.iter().rev() {
+            board.unmake_move(mov);
         }
         pv
     }
@@ -498,11 +401,9 @@ impl Search {
         moves.sort_by_cached_key(|mov| -self.get_move_score::<ONLY_CAPTURES>(*mov, board, ply));
     }
 
-    // TODO: Just realized this is incredibly inefficient, get_move_score is slow already and is
-    // being called multiple times on the same move in the same sort.
     fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
-        if let Some(pv_mov) = self.pv_table[ply as usize][ply as usize] {
-            if mov == pv_mov {
+        if let Some(pv_mov) = self.pv.get(ply as usize) {
+            if mov == *pv_mov {
                 return MAX_EVAL;
             }
         }
@@ -556,18 +457,89 @@ impl Search {
         }
     }
 
+    pub fn should_quit(&self, ply: u32) -> bool {
+        if self.start_time.elapsed().as_millis() > self.max_time {
+            return true;
+        }
+        if let Some(max_depth) = self.params.depth {
+            if ply > max_depth {
+                return true;
+            }
+        }
+        return self.should_quit.load(std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub fn print_info(result: &SearchResult) {
         print!(
             "info depth {} score cp {} time {} nodes {} nps {} pv ",
             result.depth_reached,
             result.highest_eval,
-            result.time,
+            result.time.as_millis(),
             result.nodes,
-            (result.nodes as f32 / result.time as f32 * 1000.0) as u32
+            ((result.nodes as f64 / result.time.as_nanos() as f64) * 1e9) as u32
         );
         for mov in result.pv.iter() {
             print!("{} ", mov);
         }
         println!();
+    }
+}
+
+impl Default for Search {
+    fn default() -> Self {
+        Self {
+            params: SearchParams::default(),
+            result: SearchResult::default(),
+            root_ply: 0,
+            start_time: Instant::now(),
+            pv: Vec::new(),
+            max_time: 0,
+            killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
+            should_quit: Arc::new(AtomicBool::new(false)),
+            syzygy: pyrrhic_rs::TableBases::<Board>::new("./syzygy/tb345").unwrap(),
+            has_searched_one_move: false,
+        }
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct SearchResult {
+    //pub best_move: Option<Move>,
+    pub pv: Vec<Move>,
+    pub highest_eval: i32,
+    pub depth_reached: u32,
+    pub nodes: u32,
+    pub transpositions: u32,
+    pub time: Duration,
+}
+
+#[derive(PartialEq, Copy, Clone, Default)]
+pub struct SearchParams {
+    pub depth: Option<u32>, // Maximum depth to search to
+    //pub nodes: usize,            // Maximum number of nodes to search
+    pub move_time: u128,         // Maximum time per move to search
+    pub clock: Clock,            // Time available for entire game
+    pub search_mode: SearchMode, // Defines the mode to search in
+    pub use_book: bool,
+    //pub quiet: bool,             // No intermediate search stats updates
+}
+
+#[derive(PartialEq, Copy, Clone, Default)]
+pub struct Clock {
+    pub time: [u128; 2],            // Time on the clock in milliseconds
+    pub inc: [u128; 2],             // Time increment in milliseconds
+    pub moves_to_go: Option<usize>, // Moves to go to next time control (0 = sudden death)
+}
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum SearchMode {
+    Infinite,
+    MoveTime,
+    Clock,
+}
+
+impl Default for SearchMode {
+    fn default() -> Self {
+        Self::Infinite
     }
 }

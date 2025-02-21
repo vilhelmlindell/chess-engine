@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{board::Board, search::{search, Search, SearchMode, SearchParams}};
 
 /// Positions used when running engine benchmarks.
@@ -80,8 +82,8 @@ const BENCHMARK_FENS: [&str; 56] = [
 const BENCHMARK_DEPTH: u32 = 5;
 
 pub fn bench() {
-    let mut total_time = 0;
-    let mut total_nodes = 0;
+    let mut time = Duration::ZERO;
+    let mut nodes = 0;
     for fen in BENCHMARK_FENS {
         let mut board = Board::from_fen(fen);
         let mut search = Search::default();
@@ -92,10 +94,10 @@ pub fn bench() {
         };
         println!("fen: {}", fen);
         let result = search.search(search_params, &mut board);
-        total_time += result.time;
-        total_nodes += result.nodes;
+        time += result.time;
+        nodes += result.nodes;
         println!();
     }
-    let nps = (total_nodes as f32 / (total_time as f32 / 1000.0)) as u128;
-    println!("{} nodes / {}s := {} nps", total_nodes, (total_time as f32 / 1000.0), nps);
+    let nps = ((nodes as f64 / time.as_nanos() as f64) * 1e9) as u128;
+    println!("{} nodes / {}s := {} nps", nodes, time.as_secs(), nps);
 }
