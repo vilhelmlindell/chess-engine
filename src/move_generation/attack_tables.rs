@@ -1,5 +1,6 @@
 use crate::board::bitboard::Bitboard;
-use crate::board::direction::Direction;
+use crate::board::direction::{self, Direction};
+use crate::board::piece_move::Square;
 use crate::board::Side;
 use crate::move_generation::magic_numbers::*;
 use std::cmp::min;
@@ -18,6 +19,9 @@ static mut ROOK_ATTACKS: [[Bitboard; 4096]; 64] = [[Bitboard(0); 4096]; 64];
 static mut PAWN_ATTACKS: [[Bitboard; 64]; 2] = [[Bitboard(0); 64]; 2];
 static mut BETWEEN_RAYS: [[Bitboard; 64]; 64] = [[Bitboard(0); 64]; 64];
 static mut LINE_RAYS: [[Bitboard; 64]; 64] = [[Bitboard(0); 64]; 64];
+static mut CHECKMASK_BETWEEN: [[Bitboard; 64]; 64] = [[Bitboard(0); 64]; 64];
+static mut ORTHOGONAL_RAYS: [Bitboard; 64] = [Bitboard(0); 64];
+static mut DIAGONAL_RAYS: [Bitboard; 64] = [Bitboard(0); 64];
 
 #[ctor]
 pub fn initialize_tables() {
@@ -33,6 +37,7 @@ pub fn initialize_tables() {
         PAWN_ATTACKS = precompute_pawn_attacks();
         BETWEEN_RAYS = precompute_between_rays();
         LINE_RAYS = precompute_line_rays();
+        CHECKMASK_BETWEEN = precompute_checkmask_between();
     }
 }
 
@@ -113,6 +118,25 @@ pub fn get_line_ray(square1: usize, square2: usize) -> Bitboard {
     }
 }
 
+#[inline(always)]
+pub fn get_checkmask_between(square1: usize, square2: usize) -> Bitboard {
+    unsafe {
+        CHECKMASK_BETWEEN[square1][square2]
+    }
+}
+#[inline(always)]
+pub fn get_orthogonal_rays(square: Square) -> Bitboard {
+    unsafe {
+        ORTHOGONAL_RAYS[square]
+    }
+}
+#[inline(always)]
+pub fn get_diagonal_rays(square: Square) -> Bitboard {
+    unsafe {
+        DIAGONAL_RAYS[square]
+    }
+}
+
 #[inline]
 pub fn bishop_attacks(square: usize, blockers: Bitboard) -> Bitboard {
     let mut index = Wrapping(blockers.0);
@@ -173,7 +197,6 @@ fn precompute_attack_rays() -> [[Bitboard; 8]; 64] {
     }
     attack_rays
 }
-
 fn precompute_between_rays() -> [[Bitboard; 64]; 64] {
     let mut between_rays = [[Bitboard(0); 64]; 64];
     for square in 0..64 {
@@ -276,6 +299,25 @@ fn precompute_pawn_attacks() -> [[Bitboard; 64]; 2] {
         pawn_attacks[Side::Black][square] = bitboard.north_west() | bitboard.north_east();
     }
     pawn_attacks
+}
+fn precompute_checkmask_between() -> [[Bitboard; 64]; 64] {
+    let mut between_rays = [[Bitboard(0); 64]; 64];
+    for square in 0..64 {
+        let mut square_between_rays = [Bitboard(0); 64];
+        for direction in Direction::all() {
+            for squares_to_edge in 1..get_squares_to_edge(square, direction) + 1 {
+                let end_square = (square as i32 + direction.value() * squares_to_edge as i32) as usize;
+                square_between_rays[end_square] = get_attack_ray(square, direction) ^ get_attack_ray(end_square, direction);
+            }
+        }
+        for square1 in 0..64 {
+            if get_between_ray(square, square1) == 0 {
+                square_between_rays[square1] = Bitboard::from_square(square1);
+            }
+        }
+        between_rays[square] = square_between_rays;
+    }
+    between_rays
 }
 pub fn get_bishop_attacks_classical(square: usize, blockers: Bitboard) -> Bitboard {
     let mut attacks = Bitboard(0);
@@ -385,6 +427,26 @@ fn precompute_rook_magic_bitboards() -> [[Bitboard; 4096]; 64] {
         }
     }
     rook_attacks
+}
+fn precompute_orthogonal_rays() -> [Bitboard; 64] {
+    let bitboards = [Bitboard(0); 64];
+    for square in 0..64 {
+        let mut bitboard = Bitboard(0);
+        for direction in Direction::orthogonal() {
+            bitboard |= get_attack_ray(square, direction);
+        }
+    }
+    bitboards
+}
+fn precompute_diagonal_rays() -> [Bitboard; 64] {
+    let bitboards = [Bitboard(0); 64];
+    for square in 0..64 {
+        let mut bitboard = Bitboard(0);
+        for direction in Direction::diagonal() {
+            bitboard |= get_attack_ray(square, direction);
+        }
+    }
+    bitboards
 }
 
 #[cfg(test)]

@@ -59,11 +59,10 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
     let mut board = Board::from_fen(fen);
     for mov in generate_moves(&board) {
         board.make_move(mov);
-        let nodes = search(depth - 1, mov, &mut board);
+        search(&mut result, depth - 1, mov, &mut board);
         board.unmake_move(mov);
 
-        result = result + nodes;
-        move_counter.insert(mov, nodes.nodes);
+        move_counter.insert(mov, result.nodes);
     }
     let mut sorted_keys: Vec<Move> = move_counter.keys().copied().collect();
     sorted_keys.sort();
@@ -77,25 +76,24 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
     result
 }
 
-fn search(depth: u32, prev_mov: Move, board: &mut Board) -> PerftResult {
+fn search(result: &mut PerftResult, depth: u32, prev_mov: Move, board: &mut Board) {
     let moves = generate_moves(board);
 
-    //if depth == 0 {
-    //    return PerftResult { nodes: 1 , ..Default::default() };
-    //}
-
-    if depth == 1 {
-        return PerftResult { nodes: moves.len() as u64, ..Default::default() };
+    if depth == 0 {
+        result.nodes += 1;
+        return;
     }
 
-    let mut result = PerftResult::default();
+    //if depth == 1 {
+    //    result.nodes += moves.len() as u64;
+    //    return;
+    //}
 
     for mov in moves {
         board.make_move(mov);
-        result = result + search(depth - 1, mov, board);
+        search(result, depth - 1, mov, board);
         board.unmake_move(mov);
     }
-    result
 }
 
 fn get_move_info(mov: Move, board: &Board, extra_info: bool) -> PerftResult {

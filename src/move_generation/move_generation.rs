@@ -303,13 +303,13 @@ fn add_promotions<F: Fn(usize) -> usize>(from: F, moves: &mut ArrayVec<Move, MAX
         }
     }
 }
-#[inline(never)]
+#[inline(always)]
 fn legal(board: &Board, from: usize, to: usize) -> bool {
     // a non king move is only legal if the piece isn't pinned or it's moving along the ray
     // between the piece and the king
     board.absolute_pinned_squares.bit(from) == 0 || Board::aligned(to, from, board.piece_squares[Piece::new(PieceType::King, board.side)].lsb())
 }
-#[inline(never)]
+#[inline(always)]
 fn push_pawns<const IS_WHITE: bool>(pawns: Bitboard, empty_squares: Bitboard) -> Bitboard {
     if IS_WHITE {
         pawns.north() & empty_squares
@@ -317,7 +317,7 @@ fn push_pawns<const IS_WHITE: bool>(pawns: Bitboard, empty_squares: Bitboard) ->
         pawns.south() & empty_squares
     }
 }
-#[inline(never)]
+#[inline(always)]
 fn can_castle(board: &Board, squares: Bitboard, king_squares: [usize; 2]) -> bool {
     // Check if all squares are unoccupied and not attacked
     let is_blocked = squares & board.occupied_squares != 0;

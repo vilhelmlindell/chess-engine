@@ -3,7 +3,7 @@ use super::direction::Direction;
 use super::piece::{Piece, PieceType};
 use super::piece_move::{Move, MoveType, Square};
 use super::utils::flip_rank;
-use super::zobrist_hash::{get_zobrist_castling_rights, get_zobrist_en_passant_square, get_zobrist_hash, get_zobrist_side, get_zobrist_squares, ZOBRIST_CASTLING_RIGHTS, ZOBRIST_EN_PASSANT_SQUARE, ZOBRIST_SIDE, ZOBRIST_SQUARES};
+use super::zobrist_hash::{get_zobrist_castling_rights, get_zobrist_en_passant_square, get_zobrist_hash, get_zobrist_side, get_zobrist_squares};
 use crate::evaluation::piece_square_tables::{endgame_position_value, midgame_position_value};
 use crate::move_generation::attack_tables::*;
 use crate::search::transposition_table::*;
@@ -396,23 +396,11 @@ impl Board {
     #[inline(always)]
     pub fn attacked(&self, square: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
-        if (get_pawn_attack(self.side.enemy(), square) & pawns).0 != 0 {
-            return true;
-        }
         let knights = self.piece_squares[Piece::new(PieceType::Knight, self.side.enemy())];
-        if (get_knight_attack_mask(square) & knights).0 != 0 {
-            return true;
-        }
         let queens = self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())];
         let bishops = self.piece_squares[Piece::new(PieceType::Bishop, self.side.enemy())];
-        if (bishop_attacks(square, self.occupied_squares) & (bishops | queens)).0 != 0 {
-            return true;
-        }
         let rooks = self.piece_squares[Piece::new(PieceType::Rook, self.side.enemy())];
-        if (rook_attacks(square, self.occupied_squares) & (rooks | queens)).0 != 0 {
-            return true;
-        }
-        false
+        ((get_pawn_attack(self.side.enemy(), square) & pawns) | (get_knight_attack_mask(square) & knights) | (bishop_attacks(square, self.occupied_squares) & (bishops | queens)) | (rook_attacks(square, self.occupied_squares) & (rooks | queens))) != 0
     }
     #[inline(always)]
     pub fn attackers(&self, square: usize, side: Side) -> Bitboard {
@@ -444,24 +432,13 @@ impl Board {
     #[inline(always)]
     pub fn king_attacked(&self, from: usize, to: usize) -> bool {
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
-        if (get_pawn_attack(self.side.enemy(), to) & pawns).0 != 0 {
-            return true;
-        }
         let knights = self.piece_squares[Piece::new(PieceType::Knight, self.side.enemy())];
-        if (get_knight_attack_mask(to) & knights).0 != 0 {
-            return true;
-        }
         let queens = self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())];
         let bishops = self.piece_squares[Piece::new(PieceType::Bishop, self.side.enemy())];
         let occupied = self.occupied_squares ^ Bitboard::from_square(from);
-        if (bishop_attacks(to, occupied) & (bishops | queens)).0 != 0 {
-            return true;
-        }
         let rooks = self.piece_squares[Piece::new(PieceType::Rook, self.side.enemy())];
-        if (rook_attacks(to, occupied) & (rooks | queens)).0 != 0 {
-            return true;
-        }
-        false
+
+        ((get_pawn_attack(self.side.enemy(), to) & pawns) | (get_knight_attack_mask(to) & knights) | (bishop_attacks(to, occupied) & (bishops | queens)) | (rook_attacks(to, occupied) & (rooks | queens))) != 0
     }
     #[inline(always)]
     pub fn aligned(square1: usize, square2: usize, square3: usize) -> bool {
@@ -511,6 +488,25 @@ impl Board {
         self.material_balance -= piece.piece_type().centipawns() * piece.side().factor();
         self.total_material -= piece.piece_type().standard_value();
         self.zobrist_hash ^= get_zobrist_squares(square, piece);
+    }
+    #[inline(always)]
+    fn checkmask(&mut self) {
+        let square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
+        let mut attackers = Bitboard(0);
+
+        let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
+        attackers |= get_pawn_attack(self.side.enemy(), square) & pawns;
+
+        let knights = self.piece_squares[Piece::new(PieceType::Knight, self.side.enemy())];
+        attackers |= get_knight_attack_mask(square) & knights;
+
+        let queens = self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())];
+
+        let bishops = self.piece_squares[Piece::new(PieceType::Bishop, self.side.enemy())];
+        attackers |= bishop_attacks(square, self.occupied_squares) & (bishops | queens);
+
+        let rooks = self.piece_squares[Piece::new(PieceType::Rook, self.side.enemy())];
+        attackers |= rook_attacks(square, self.occupied_squares) & (rooks | queens);
     }
     #[inline(always)]
     fn absolute_pins(&self) -> Bitboard {
@@ -693,6 +689,7 @@ impl BoardState {
             halfmove_clock: state.halfmove_clock,
             castling_rights: state.castling_rights,
             last_irreversible_ply: state.last_irreversible_ply,
+
             ..Self::default()
         }
     }

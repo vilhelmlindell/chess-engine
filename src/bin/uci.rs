@@ -9,7 +9,7 @@ use std::sync::mpsc;
 use chess_engine::bench;
 use chess_engine::board::zobrist_hash::initialize_zobrist_tables;
 use chess_engine::board::{Board, Side};
-use chess_engine::move_generation::attack_tables::initialize_tables;
+use chess_engine::move_generation::attack_tables::{get_between_ray, get_checkmask_between, initialize_tables};
 use chess_engine::move_generation::generate_moves;
 use chess_engine::perft::perft;
 use chess_engine::search::{Search, SearchMode, SearchParams, SearchResult};
@@ -22,6 +22,8 @@ fn main() {
         }
         return;
     }
+    println!("{}", get_checkmask_between(0, 18));
+    println!("{}", get_checkmask_between(0, 17));
     Uci::start();
 }
 
