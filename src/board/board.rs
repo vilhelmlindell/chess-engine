@@ -12,6 +12,7 @@ use pyrrhic_rs::EngineAdapter;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Index, IndexMut};
+use std::u64;
 
 const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -58,6 +59,9 @@ pub struct Board {
     pub opening_move_count: u32,
     pub ply: u32,
     pub can_detect_threefold_repetition: bool,
+    pub orthogonal_pinmask: Bitboard,
+    pub diagonal_pinmask: Bitboard,
+    pub checkmask: Bitboard,
 }
 
 impl Board {
@@ -65,6 +69,10 @@ impl Board {
         let mut board = Self::default();
         board.load_fen(fen);
         board.absolute_pinned_squares = board.absolute_pins();
+        board.checkmask = board.checkmask();
+        let square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
+        board.orthogonal_pinmask = get_orthogonal_rays(square);
+        board.diagonal_pinmask = get_diagonal_rays(square);
         board
     }
     pub fn fen(&self) -> String {
@@ -294,6 +302,11 @@ impl Board {
         self.zobrist_hash ^= get_zobrist_side();
         self.absolute_pinned_squares = self.absolute_pins();
 
+        //self.checkmask = self.checkmask();
+        //let square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
+        //self.orthogonal_pinmask = get_orthogonal_rays(square);
+        //self.diagonal_pinmask = get_diagonal_rays(square);
+
         if self.state().halfmove_clock != 0 {
             state.halfmove_clock += 1;
         }
@@ -342,6 +355,11 @@ impl Board {
         }
 
         self.absolute_pinned_squares = self.absolute_pins();
+
+        //self.checkmask = self.checkmask();
+        //let square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
+        //self.orthogonal_pinmask = get_orthogonal_rays(square);
+        //self.diagonal_pinmask = get_diagonal_rays(square);
         self.states.pop();
 
         let castling_rights_bits_after = Self::castling_rights_bits(self.state().castling_rights);
@@ -424,9 +442,6 @@ impl Board {
     }
     pub fn in_check(&self) -> bool {
         let king_square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
-        if self.piece_squares[Piece::new(PieceType::King, self.side)].count_ones() == 0 {
-            println!("hello");
-        }
         return self.attacked(king_square);
     }
     #[inline(always)]
@@ -490,23 +505,31 @@ impl Board {
         self.zobrist_hash ^= get_zobrist_squares(square, piece);
     }
     #[inline(always)]
-    fn checkmask(&mut self) {
+    fn checkmask(&mut self) -> Bitboard {
         let square = self.piece_squares[Piece::new(PieceType::King, self.side)].lsb();
         let mut attackers = Bitboard(0);
 
         let pawns = self.piece_squares[Piece::new(PieceType::Pawn, self.side.enemy())];
-        attackers |= get_pawn_attack(self.side.enemy(), square) & pawns;
-
         let knights = self.piece_squares[Piece::new(PieceType::Knight, self.side.enemy())];
-        attackers |= get_knight_attack_mask(square) & knights;
-
         let queens = self.piece_squares[Piece::new(PieceType::Queen, self.side.enemy())];
-
         let bishops = self.piece_squares[Piece::new(PieceType::Bishop, self.side.enemy())];
-        attackers |= bishop_attacks(square, self.occupied_squares) & (bishops | queens);
-
         let rooks = self.piece_squares[Piece::new(PieceType::Rook, self.side.enemy())];
+
+        attackers |= get_pawn_attack(self.side.enemy(), square) & pawns;
+        attackers |= get_knight_attack_mask(square) & knights;
+        attackers |= bishop_attacks(square, self.occupied_squares) & (bishops | queens);
         attackers |= rook_attacks(square, self.occupied_squares) & (rooks | queens);
+
+        let attacker_square = attackers.lsb();
+        let attacker_count = attackers.count_ones();
+
+        if attacker_count > 2 {
+            return Bitboard(0);
+        } else if attacker_count == 1 {
+            return get_checkmask_between(square, attacker_square);
+        } else {
+            return Bitboard(u64::MAX);
+        }
     }
     #[inline(always)]
     fn absolute_pins(&self) -> Bitboard {
@@ -600,6 +623,9 @@ impl Default for Board {
             opening_move_count: 0,
             ply: 0,
             can_detect_threefold_repetition: false,
+            orthogonal_pinmask: Bitboard(0),
+            diagonal_pinmask: Bitboard(0),
+            checkmask: Bitboard(0),
         }
     }
 }

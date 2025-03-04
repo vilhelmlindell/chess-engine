@@ -2,7 +2,7 @@ use crate::board::bitboard::Bitboard;
 use crate::board::piece::{Piece, PieceType};
 use crate::board::piece_move::{Move, MoveType};
 use crate::board::Board;
-use crate::move_generation::attack_tables::get_between_ray;
+use crate::move_generation::attack_tables::{get_between_ray, get_orthogonal_rays};
 use crate::move_generation::generate_moves;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -77,12 +77,12 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
 }
 
 fn search(result: &mut PerftResult, depth: u32, prev_mov: Move, board: &mut Board) {
-    let moves = generate_moves(board);
-
     if depth == 0 {
         result.nodes += 1;
         return;
     }
+
+    let moves = generate_moves(board);
 
     //if depth == 1 {
     //    result.nodes += moves.len() as u64;

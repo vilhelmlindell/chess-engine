@@ -35,9 +35,9 @@ pub struct Search {
     pub pv: Vec<Move>,
     pub should_quit: Arc<AtomicBool>, // Shared atomic flag
     pub root_ply: u32,
-    pub has_searched_one_move: bool,
     pub syzygy: pyrrhic_rs::TableBases<Board>,
     pub start_time: Instant,
+    pub previous_static_eval: i32,
 }
 
 impl Search {
@@ -95,8 +95,6 @@ impl Search {
                 break;
             }
 
-            self.has_searched_one_move = false;
-
             let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
             // Don't update results if search was interrupted
@@ -148,11 +146,17 @@ impl Search {
             return 0;
         }
 
+        alpha = alpha.max(-MAX_EVAL + ply as i32);
+        beta = beta.min(MAX_EVAL - ply as i32);
+        if alpha >= beta {
+            return alpha;
+        }
+
         if depth == 0 {
             return self.quiescence_search(board, alpha, beta, ply);
         }
 
-        if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+        let tt_hit = if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
             if entry.hash == board.zobrist_hash && entry.depth >= depth {
                 self.result.transpositions += 1;
 
@@ -166,7 +170,9 @@ impl Search {
                     return entry.eval;
                 }
             }
-        }
+        };
+
+        //let hash_move = tt_hit.map(|entry| entry.best_move);
 
         if board.occupied_squares.count_ones() <= 5 {
             let result = self.probe_syzygy_root(board);
@@ -193,6 +199,10 @@ impl Search {
             }
         }
 
+        //let static_eval = evaluate(board);
+        //let improving = ply >= 2 && static_eval > self.previous_static_eval;
+        //self.previous_static_eval = static_eval;
+
         let reduction = 2;
         if ALLOW_NULL_MOVE && !board.in_check() && depth > reduction + 1 {
             board.make_null_move();
@@ -204,12 +214,8 @@ impl Search {
             }
         }
 
-        // Mate distance pruning
-        alpha = alpha.max(-MAX_EVAL + ply as i32);
-        beta = beta.min(MAX_EVAL - ply as i32);
-        if alpha >= beta {
-            return alpha;
-        }
+        //let futility_margin = 100 * depth as i32;
+        //let do_futility = depth <= 3 && !board.in_check() && static_eval + futility_margin < alpha;
 
         let mut moves = generate_moves(board);
 
@@ -228,26 +234,46 @@ impl Search {
         let mut best_move = None;
         let mut best_eval = -MAX_EVAL;
         let mut evaluation_bound = NodeType::UpperBound;
+        let mut extensions = 0;
 
         // Principal Variation Search
         for (i, &mov) in moves.iter().enumerate() {
+            //// Futility pruning, skip moves unlikely to improve alpha
+            //if do_futility && moves_searched > 0 && !board.is_capture(mov) && !board.gives_check(mov) && mov.move_type() == MoveType::Normal {
+            //    continue;
+            //}
+
             board.make_move(mov);
 
-            let eval = if i == 0 {
-                -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1)
+            let mut eval = 0;
+            let full_depth_search = board.in_check() || self.is_killer_move(mov, ply);
+
+            if i == 0 {
+                eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
+            } else if i >= 3 && depth >= 3 && !full_depth_search {
+                let r = 1;
+                let reduced_depth = (depth - 1 - r).max(1);
+
+                eval = -self.pvs::<true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
+
+                if eval > alpha {
+                    eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+
+                    if eval > alpha && eval < beta {
+                        eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
+                    }
+                }
             } else {
-                let mut eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+                // Non-PV nodes - scout with null window first
+                eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+
+                // Re-search with full window if the move looks promising
                 if eval > alpha && eval < beta {
                     eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
                 }
-                eval
-            };
+            }
 
             board.unmake_move(mov);
-
-            if ply == 0 {
-                self.has_searched_one_move = true;
-            }
 
             if eval > best_eval {
                 best_eval = eval;
@@ -420,13 +446,8 @@ impl Search {
             let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
             score += CAPTURE_BASE_SCORE + capture_score;
         } else {
-            for killer_move in &self.killer_moves[ply as usize] {
-                if let Some(killer) = killer_move {
-                    if mov == *killer {
-                        score += KILLER_MOVE_SCORE;
-                        break;
-                    }
-                }
+            if self.is_killer_move(mov, ply) {
+                score += KILLER_MOVE_SCORE;
             }
         }
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
@@ -443,6 +464,17 @@ impl Search {
             self.killer_moves[ply].rotate_right(1);
             self.killer_moves[ply][0] = Some(mov);
         }
+    }
+
+    fn is_killer_move(&self, mov: Move, ply: u32) -> bool {
+        for killer_move in self.killer_moves[ply as usize] {
+            if let Some(killer) = killer_move {
+                if killer == mov {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     fn calculate_time(&mut self, board: &Board) -> u128 {
@@ -501,7 +533,7 @@ impl Default for Search {
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             should_quit: Arc::new(AtomicBool::new(false)),
             syzygy: pyrrhic_rs::TableBases::<Board>::new("./syzygy/tb345").unwrap(),
-            has_searched_one_move: false,
+            previous_static_eval: 0,
         }
     }
 }

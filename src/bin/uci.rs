@@ -22,8 +22,6 @@ fn main() {
         }
         return;
     }
-    println!("{}", get_checkmask_between(0, 18));
-    println!("{}", get_checkmask_between(0, 17));
     Uci::start();
 }
 

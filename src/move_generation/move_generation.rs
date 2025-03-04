@@ -62,7 +62,7 @@ pub fn generate_moves(board: &Board) -> ArrayVec<Move, MAX_LEGAL_MOVES> {
 
     moves
 }
-#[inline(never)]
+#[inline(always)]
 fn generate_pawn_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let (up_left, up_right, up) = if IS_WHITE { (Direction::NorthWest, Direction::NorthEast, Direction::North) } else { (Direction::SouthEast, Direction::SouthWest, Direction::South) };
 
@@ -100,43 +100,103 @@ fn generate_pawn_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGA
 
     generate_en_passant_moves(moves, board);
 }
-#[inline(never)]
+#[inline(always)]
 fn generate_knight_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+    //let knights = board.piece_squares[Piece::new(PieceType::Knight, board.side)] & !(board.orthogonal_pinmask | board.diagonal_pinmask);
+    //println!("knights: {}", knights);
+    //println!("diagonal: {}", board.diagonal_pinmask);
+    //println!("orthogonal: {}", board.orthogonal_pinmask);
+
+    //for from in knights {
+    //    let attack_bitboard = get_knight_attack_mask(from) & !board.friendly_squares() & board.checkmask & !(board.orthogonal_pinmask | board.diagonal_pinmask);
+    //    add_moves_new(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
     let bitboard = board.piece_squares[Piece::new(PieceType::Knight, board.side)];
 
     for from in bitboard {
         let attack_bitboard = get_knight_attack_mask(from) & !board.friendly_squares();
-        add_moves(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+        add_moves(&|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
 }
-#[inline(never)]
+#[inline(always)]
 fn generate_bishop_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Bishop, board.side)];
 
     for from in bitboard {
         let attack_bitboard = bishop_attacks(from, board.occupied_squares) & !board.friendly_squares();
-        add_moves(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+        add_moves(&|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
+    //let bishops = board.piece_squares[Piece::new(PieceType::Bishop, board.side)];
+    //let pinned = bishops & board.diagonal_pinmask;
+    //let unpinned = bishops & !board.diagonal_pinmask;
+
+    //for from in pinned {
+    //    let attack_bitboard = bishop_attacks(from, board.occupied_squares) & !board.friendly_squares() & board.checkmask & board.diagonal_pinmask;
+    //    add_moves_new(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
+
+    //for from in unpinned {
+    //    let attack_bitboard = bishop_attacks(from, board.occupied_squares) & !board.friendly_squares() & board.checkmask;
+    //    add_moves_new(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
 }
-#[inline(never)]
+#[inline(always)]
 fn generate_rook_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Rook, board.side)];
 
     for from in bitboard {
         let attack_bitboard = rook_attacks(from, board.occupied_squares) & !board.friendly_squares();
-        add_moves(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+        add_moves(&|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
+    //let bitboard = board.piece_squares[Piece::new(PieceType::Rook, board.side)];
+
+    //for from in bitboard {
+    //    let attack_bitboard = rook_attacks(from, board.occupied_squares) & !board.friendly_squares();
+    //    add_moves(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
+    //let rooks = board.piece_squares[Piece::new(PieceType::Rook, board.side)];
+    //let pinned = rooks & board.orthogonal_pinmask;
+    //let unpinned = rooks & !board.orthogonal_pinmask;
+
+    //for from in pinned {
+    //    let attack_bitboard = rook_attacks(from, board.occupied_squares) & !board.friendly_squares() & board.checkmask & board.orthogonal_pinmask;
+    //    add_moves_new(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
+
+    //for from in unpinned {
+    //    let attack_bitboard = rook_attacks(from, board.occupied_squares) & !board.friendly_squares() & board.checkmask;
+    //    add_moves_new(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
 }
-#[inline(never)]
+#[inline(always)]
 fn generate_queen_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Queen, board.side)];
 
     for from in bitboard {
         let attack_bitboard = queen_attacks(from, board.occupied_squares) & !board.friendly_squares();
-        add_moves(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+        add_moves(&|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
     }
+    //let queens = board.piece_squares[Piece::new(PieceType::Queen, board.side)];
+    //let pinned_diagonal = queens & board.diagonal_pinmask;
+    //let pinned_orthogonal = queens & board.orthogonal_pinmask;
+    //let unpinned = queens & !board.orthogonal_pinmask;
+
+    //for from in pinned_diagonal {
+    //    let attack_bitboard = queen_attacks(from, board.occupied_squares) & !board.friendly_squares() & board.checkmask & board.diagonal_pinmask;
+    //    add_moves_new(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
+
+    //for from in pinned_orthogonal {
+    //    let attack_bitboard = queen_attacks(from, board.occupied_squares) & !board.friendly_squares() & board.checkmask & board.orthogonal_pinmask;
+    //    add_moves_new(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
+
+    //for from in unpinned {
+    //    let attack_bitboard = queen_attacks(from, board.occupied_squares) & !board.friendly_squares() & board.checkmask;
+    //    add_moves_new(|to| Move::new(from, to, MoveType::Normal), moves, attack_bitboard, board);
+    //}
 }
-#[inline(never)]
+#[inline(always)]
 fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let from = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
     let enemy_king_square = board.piece_squares[Piece::new(PieceType::King, board.side.enemy())];
@@ -148,7 +208,7 @@ fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
         }
     }
 }
-#[inline(never)]
+#[inline(always)]
 fn generate_castling_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     if IS_WHITE {
         if can_castle(board, WHITE_KINGSIDE_MASK, WHITE_KINGSIDE_SQUARES) && board.state().castling_rights[Side::White].kingside {
@@ -166,7 +226,7 @@ fn generate_castling_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_
         }
     }
 }
-#[inline(never)]
+#[inline(always)]
 fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     if let Some(to) = board.state().en_passant_square {
         let mut en_passant_pawns = board.piece_squares[Piece::new(PieceType::Pawn, board.side)] & get_pawn_attack(board.side, to);
@@ -228,7 +288,7 @@ fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board:
         }
     }
 }
-#[inline(never)]
+#[inline(always)]
 fn resolve_single_check<const IS_WHITE: bool>(attacker_square: usize, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
     let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
 
@@ -289,6 +349,12 @@ fn add_moves<F: Fn(usize) -> Move>(mov: F, moves: &mut ArrayVec<Move, MAX_LEGAL_
         if legal(board, mov.from(), mov.to()) {
             unsafe { moves.push_unchecked(mov) }
         }
+    }
+}
+#[inline(always)]
+fn add_moves_new<F: Fn(usize) -> Move>(mov: F, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, bitboard: Bitboard, board: &Board) {
+    for to in bitboard {
+        unsafe { moves.push_unchecked(mov(to)) }
     }
 }
 #[inline(always)]

@@ -19,7 +19,7 @@ static mut ROOK_ATTACKS: [[Bitboard; 4096]; 64] = [[Bitboard(0); 4096]; 64];
 static mut PAWN_ATTACKS: [[Bitboard; 64]; 2] = [[Bitboard(0); 64]; 2];
 static mut BETWEEN_RAYS: [[Bitboard; 64]; 64] = [[Bitboard(0); 64]; 64];
 static mut LINE_RAYS: [[Bitboard; 64]; 64] = [[Bitboard(0); 64]; 64];
-static mut CHECKMASK_BETWEEN: [[Bitboard; 64]; 64] = [[Bitboard(0); 64]; 64];
+static mut CHECKMASK_BETWEEN: [[Bitboard; 65]; 64] = [[Bitboard(0); 65]; 64];
 static mut ORTHOGONAL_RAYS: [Bitboard; 64] = [Bitboard(0); 64];
 static mut DIAGONAL_RAYS: [Bitboard; 64] = [Bitboard(0); 64];
 
@@ -38,6 +38,8 @@ pub fn initialize_tables() {
         BETWEEN_RAYS = precompute_between_rays();
         LINE_RAYS = precompute_line_rays();
         CHECKMASK_BETWEEN = precompute_checkmask_between();
+        DIAGONAL_RAYS = precompute_diagonal_rays();
+        ORTHOGONAL_RAYS = precompute_orthogonal_rays();
     }
 }
 
@@ -300,10 +302,10 @@ fn precompute_pawn_attacks() -> [[Bitboard; 64]; 2] {
     }
     pawn_attacks
 }
-fn precompute_checkmask_between() -> [[Bitboard; 64]; 64] {
-    let mut between_rays = [[Bitboard(0); 64]; 64];
+fn precompute_checkmask_between() -> [[Bitboard; 65]; 64] {
+    let mut between_rays = [[Bitboard(0); 65]; 64];
     for square in 0..64 {
-        let mut square_between_rays = [Bitboard(0); 64];
+        let mut square_between_rays = [Bitboard(0); 65];
         for direction in Direction::all() {
             for squares_to_edge in 1..get_squares_to_edge(square, direction) + 1 {
                 let end_square = (square as i32 + direction.value() * squares_to_edge as i32) as usize;
@@ -315,6 +317,7 @@ fn precompute_checkmask_between() -> [[Bitboard; 64]; 64] {
                 square_between_rays[square1] = Bitboard::from_square(square1);
             }
         }
+        square_between_rays[64] = Bitboard(u64::MAX);
         between_rays[square] = square_between_rays;
     }
     between_rays
@@ -429,22 +432,24 @@ fn precompute_rook_magic_bitboards() -> [[Bitboard; 4096]; 64] {
     rook_attacks
 }
 fn precompute_orthogonal_rays() -> [Bitboard; 64] {
-    let bitboards = [Bitboard(0); 64];
+    let mut bitboards = [Bitboard(0); 64];
     for square in 0..64 {
         let mut bitboard = Bitboard(0);
         for direction in Direction::orthogonal() {
             bitboard |= get_attack_ray(square, direction);
         }
+        bitboards[square] = bitboard;
     }
     bitboards
 }
 fn precompute_diagonal_rays() -> [Bitboard; 64] {
-    let bitboards = [Bitboard(0); 64];
+    let mut bitboards = [Bitboard(0); 64];
     for square in 0..64 {
         let mut bitboard = Bitboard(0);
         for direction in Direction::diagonal() {
             bitboard |= get_attack_ray(square, direction);
         }
+        bitboards[square] = bitboard;
     }
     bitboards
 }
