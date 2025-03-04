@@ -45,6 +45,10 @@ impl Search {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
         self.result = SearchResult::default();
 
+        if generate_moves(board).is_empty() {
+            return self.result.clone();
+        }
+
         if search_params.use_book {
             if let Some(book_move) = get_book_move(board, 1.0) {
                 self.result.pv.push(book_move);
@@ -58,6 +62,7 @@ impl Search {
         self.root_ply = board.ply;
 
         if board.occupied_squares.count_ones() <= 5 {
+            //println!("syzygy: {}", board.fen());
             let result = self.probe_syzygy_root(board);
             match result.root {
                 pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
