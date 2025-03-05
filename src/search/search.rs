@@ -253,19 +253,19 @@ impl Search {
 
             if i == 0 {
                 eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
-            } else if i >= 3 && depth >= 3 && !full_depth_search {
-                let r = 1;
-                let reduced_depth = (depth - 1 - r).max(1);
+            //} else if i >= 3 && depth >= 3 && !full_depth_search {
+            //    let r = 1;
+            //    let reduced_depth = (depth - 1 - r).max(1);
 
-                eval = -self.pvs::<true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
+            //    eval = -self.pvs::<true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
 
-                if eval > alpha {
-                    eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+            //    if eval > alpha {
+            //        eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
 
-                    if eval > alpha && eval < beta {
-                        eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
-                    }
-                }
+            //        if eval > alpha && eval < beta {
+            //            eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
+            //        }
+            //    }
             } else {
                 // Non-PV nodes - scout with null window first
                 eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
