@@ -33,7 +33,8 @@ pub struct Search {
     pub max_time: u128,
     pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
     pub pv_table: [[Option<Move>; MAX_DEPTH]; MAX_DEPTH], // Initialize PV table
-    pub pv: Vec<Move>,
+    pub pv_lengths: [usize; MAX_DEPTH],
+    //pub pv: Vec<Move>,
     pub should_quit: Arc<AtomicBool>, // Shared atomic flag
     pub root_ply: u32,
     pub syzygy: pyrrhic_rs::TableBases<Board>,
@@ -101,28 +102,9 @@ impl Search {
 
             let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
-            // Aspiration windows for deeper searches
-            if depth >= 4 {
-                let window = 50;
-                let mut alpha = eval - window;
-                let mut beta = eval + window;
-
-                loop {
-                    let score = self.pvs::<true>(board, depth, alpha, beta, 0);
-
-                    if score <= alpha {
-                        alpha = -MAX_EVAL;
-                    } else if score >= beta {
-                        beta = MAX_EVAL;
-                    } else {
-                        break;
-                    }
-                }
-            }
-
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
-            self.result.pv = self.extract_pv(depth);
+            self.result.pv = self.extract_pv();
             self.result.time = self.start_time.elapsed();
 
             Search::print_info(&self.result);
@@ -131,11 +113,13 @@ impl Search {
         self.result.clone()
     }
     fn pvs<const ALLOW_NULL_MOVE: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
-        self.result.nodes += 1;
+        self.pv_lengths[ply as usize] = 0;
 
         if self.should_quit(depth) {
             return 0;
         }
+
+        self.result.nodes += 1;
 
         // Check the 50-move rule (halfmove clock)
         if board.state().halfmove_clock >= 100 {
@@ -236,8 +220,6 @@ impl Search {
         let mut evaluation_bound = NodeType::UpperBound;
         let mut extensions = 0;
 
-        self.pv_table[ply as usize + 1] = [None; MAX_DEPTH];
-
         // Principal Variation Search
         for (i, &mov) in moves.iter().enumerate() {
             //// Futility pruning, skip moves unlikely to improve alpha
@@ -284,14 +266,17 @@ impl Search {
                 if eval > alpha {
                     evaluation_bound = NodeType::Exact;
                     alpha = eval;
-                    //self.pv_table[ply as usize][ply as usize] = best_move;
-                    //for j in 1..MAX_DEPTH as u32 {
-                    //    self.pv_table[ply as usize][j as usize] = self.pv_table[(ply + 1) as usize][j as usize - 1];
-                    //}
-                    self.pv_table[ply as usize][ply as usize] = best_move;
-                    for i in (ply + 1)..MAX_DEPTH as u32 {
-                        self.pv_table[ply as usize][i as usize] = self.pv_table[(ply + 1) as usize][i as usize];
+                    self.pv_table[ply as usize][0] = best_move;
+
+                    let (left, right) = self.pv_table.split_at_mut(ply as usize + 1);
+
+                    if let (Some(dest_row), Some(src_row)) = (left.last_mut(), right.first()) {
+                        let dest = &mut dest_row[1..(self.pv_lengths[ply as usize + 1] + 1)];
+                        let src = &src_row[0..self.pv_lengths[ply as usize + 1]];
+                        dest.copy_from_slice(src);
                     }
+
+                    self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
                 }
             }
 
@@ -417,9 +402,9 @@ impl Search {
     //    }
     //    pv
     //}
-    pub fn extract_pv(&self, depth: u32) -> Vec<Move> {
+    pub fn extract_pv(&self) -> Vec<Move> {
         let mut pv = Vec::new();
-        for i in 0..depth as usize {
+        for i in 0..self.pv_lengths[0] {
             if let Some(mov) = self.pv_table[0][i] {
                 pv.push(mov);
             } else {
@@ -530,8 +515,8 @@ impl Default for Search {
             result: SearchResult::default(),
             root_ply: 0,
             start_time: Instant::now(),
-            pv: Vec::new(),
             pv_table: [[None; MAX_DEPTH]; MAX_DEPTH],
+            pv_lengths: [0; MAX_DEPTH],
             max_time: 0,
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             should_quit: Arc::new(AtomicBool::new(false)),
