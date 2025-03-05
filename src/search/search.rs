@@ -47,6 +47,7 @@ impl Search {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
         self.result = SearchResult::default();
         self.pv_table = [[None; MAX_DEPTH]; MAX_DEPTH];
+        self.pv_lengths = [0; MAX_DEPTH];
         board.transposition_table.clear();
 
         //if search_params.use_book {
@@ -100,9 +101,12 @@ impl Search {
                 break;
             }
 
+            //self.pv_table = [[None; MAX_DEPTH]; MAX_DEPTH];
+            //self.pv_lengths = [0; MAX_DEPTH];
+
             let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
-            let new_pv = self.extract_pv(depth, board);
+            //let new_pv = self.extract_pv(depth, board);
 
             // Aspiration windows for deeper searches
             if depth >= 4 {
@@ -125,8 +129,7 @@ impl Search {
 
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
-            //self.result.pv = self.extract_pv(depth, board);
-            self.result.pv = new_pv;
+            self.result.pv = self.extract_pv();
             self.result.time = self.start_time.elapsed();
 
             Search::print_info(&self.result);
@@ -135,8 +138,6 @@ impl Search {
         self.result.clone()
     }
     fn pvs<const ALLOW_NULL_MOVE: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
-        self.pv_lengths[ply as usize] = 0;
-
         if self.should_quit(depth) {
             return 0;
         }
@@ -328,9 +329,9 @@ impl Search {
 
         // Currently not required since every move in quiescence is a capture and therefore
         // irreversible
-        if board.is_repetition(ply > 2) {
-            return 0;
-        }
+        //if board.is_repetition(ply > 2) {
+        //    return 0;
+        //}
 
         // Stand pat evaluation
         let stand_pat = evaluate(board);
@@ -400,57 +401,57 @@ impl Search {
             )
             .expect(&format!("Syzygy tablebase probe failed, fen: {}", board.fen()));
     }
-    pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
-        let mut current_hash = board.zobrist_hash;
-        let mut pv = Vec::new();
-        let mut i = 0;
-
-        while let Some(entry) = board.transposition_table.probe(current_hash) {
-            if entry.hash != current_hash || i >= depth {
-                break;
-            }
-
-            let pv_move = entry.best_move;
-            pv.push(pv_move);
-
-            board.make_move(pv_move);
-            current_hash = board.zobrist_hash;
-            i += 1;
-        }
-
-        // Unmake all the moves to restore the original board state
-        for &mov in pv.iter().rev() {
-            board.unmake_move(mov);
-        }
-        pv
-    }
-    //pub fn extract_pv(&self) -> Vec<Move> {
+    //pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
+    //    let mut current_hash = board.zobrist_hash;
     //    let mut pv = Vec::new();
-    //    for i in 0..self.pv_lengths[0] {
-    //        if let Some(mov) = self.pv_table[0][i] {
-    //            pv.push(mov);
-    //        } else {
+    //    let mut i = 0;
+
+    //    while let Some(entry) = board.transposition_table.probe(current_hash) {
+    //        if entry.hash != current_hash || i >= depth {
     //            break;
     //        }
+
+    //        let pv_move = entry.best_move;
+    //        pv.push(pv_move);
+
+    //        board.make_move(pv_move);
+    //        current_hash = board.zobrist_hash;
+    //        i += 1;
+    //    }
+
+    //    // Unmake all the moves to restore the original board state
+    //    for &mov in pv.iter().rev() {
+    //        board.unmake_move(mov);
     //    }
     //    pv
     //}
+    pub fn extract_pv(&self) -> Vec<Move> {
+        let mut pv = Vec::new();
+        for i in 0..self.pv_lengths[0] {
+            if let Some(mov) = self.pv_table[0][i] {
+                pv.push(mov);
+            } else {
+                break;
+            }
+        }
+        pv
+    }
 
     pub fn order_moves<const ONLY_CAPTURES: bool>(&self, board: &Board, moves: &mut [Move], ply: u32) {
         moves.sort_by_cached_key(|mov| -self.get_move_score::<ONLY_CAPTURES>(*mov, board, ply));
     }
 
     fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
-        //if let Some(pv_mov) = self.pv_table[ply as usize][0] {
-        //    if mov == pv_mov {
-        //        return MAX_EVAL;
-        //    }
-        //}
-        if let Some(pv_mov) = self.result.pv.get(ply as usize) {
-            if mov == *pv_mov {
+        if let Some(pv_mov) = self.pv_table[ply as usize][0] {
+            if mov == pv_mov {
                 return MAX_EVAL;
             }
         }
+        //if let Some(pv_mov) = self.result.pv.get(ply as usize) {
+        //    if mov == *pv_mov {
+        //        return MAX_EVAL;
+        //    }
+        //}
 
         let mut score = 0;
 
