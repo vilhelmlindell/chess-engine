@@ -32,6 +32,7 @@ pub struct Search {
     pub result: SearchResult,
     pub max_time: u128,
     pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
+    pub pv_table: [[Option<Move>; MAX_DEPTH]; MAX_DEPTH], // Initialize PV table
     pub pv: Vec<Move>,
     pub should_quit: Arc<AtomicBool>, // Shared atomic flag
     pub root_ply: u32,
@@ -44,10 +45,8 @@ impl Search {
     pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
         self.result = SearchResult::default();
-
-        if generate_moves(board).is_empty() {
-            return self.result.clone();
-        }
+        self.pv_table = [[None; MAX_DEPTH]; MAX_DEPTH];
+        board.transposition_table.clear();
 
         if search_params.use_book {
             if let Some(book_move) = get_book_move(board, 1.0) {
@@ -102,13 +101,6 @@ impl Search {
 
             let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
-            // Don't update results if search was interrupted
-            if self.should_quit(depth) {
-                break;
-            }
-
-            let mut new_pv = self.extract_pv(depth, board);
-
             // Aspiration windows for deeper searches
             if depth >= 4 {
                 let window = 50;
@@ -128,11 +120,9 @@ impl Search {
                 }
             }
 
-            new_pv = self.extract_pv(depth, board);
-
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
-            self.result.pv = new_pv;
+            self.result.pv = self.extract_pv(depth);
             self.result.time = self.start_time.elapsed();
 
             Search::print_info(&self.result);
@@ -147,7 +137,12 @@ impl Search {
             return 0;
         }
 
-        if self.is_draw(board) {
+        // Check the 50-move rule (halfmove clock)
+        if board.state().halfmove_clock >= 100 {
+            return 0;
+        }
+
+        if board.is_repetition(ply > 2) {
             return 0;
         }
 
@@ -161,7 +156,7 @@ impl Search {
             return self.quiescence_search(board, alpha, beta, ply);
         }
 
-        let tt_hit = if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+        if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
             if entry.hash == board.zobrist_hash && entry.depth >= depth {
                 self.result.transpositions += 1;
 
@@ -175,7 +170,7 @@ impl Search {
                     return entry.eval;
                 }
             }
-        };
+        }
 
         //let hash_move = tt_hit.map(|entry| entry.best_move);
 
@@ -241,6 +236,8 @@ impl Search {
         let mut evaluation_bound = NodeType::UpperBound;
         let mut extensions = 0;
 
+        self.pv_table[ply as usize + 1] = [None; MAX_DEPTH];
+
         // Principal Variation Search
         for (i, &mov) in moves.iter().enumerate() {
             //// Futility pruning, skip moves unlikely to improve alpha
@@ -250,7 +247,7 @@ impl Search {
 
             board.make_move(mov);
 
-            let mut eval = 0;
+            let mut eval;
             let full_depth_search = board.in_check() || self.is_killer_move(mov, ply);
 
             if i == 0 {
@@ -287,6 +284,10 @@ impl Search {
                 if eval > alpha {
                     evaluation_bound = NodeType::Exact;
                     alpha = eval;
+                    self.pv_table[ply as usize][0] = best_move;
+                    for j in 1..MAX_DEPTH as u32 {
+                        self.pv_table[ply as usize][j as usize] = self.pv_table[(ply + 1) as usize][j as usize - 1];
+                    }
                 }
             }
 
@@ -299,7 +300,6 @@ impl Search {
             }
         }
 
-        // Store position in transposition table
         if let Some(best_move) = best_move {
             let entry = TranspositionEntry::new(depth, best_eval, best_move, evaluation_bound, board.zobrist_hash);
             board.transposition_table.store(entry);
@@ -312,6 +312,12 @@ impl Search {
         self.result.nodes += 1;
 
         if self.should_quit(ply) {
+            return 0;
+        }
+
+        // Currently not required since every move in quiescence is a capture and therefore
+        // irreversible
+        if board.is_repetition(ply > 2) {
             return 0;
         }
 
@@ -365,6 +371,7 @@ impl Search {
         //println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
         //println!("halfmove {}", board.state().halfmove_clock as u32 / 2);
         //println!("fen {}", board.fen());
+        //println!("ep dadwa: {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
         return self
             .syzygy
             .probe_root(
@@ -380,54 +387,41 @@ impl Search {
                 flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32,
                 board.side.value() == 0,
             )
-            .expect("Syzygy tablebase probe failed");
+            .expect(&format!("Syzygy tablebase probe failed, fen: {}", board.fen()));
     }
 
-    fn is_draw(&self, board: &Board) -> bool {
-        if board.state().halfmove_clock >= 100 {
-            return true;
-        }
+    //pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
+    //    let mut current_hash = board.zobrist_hash;
+    //    let mut pv = Vec::new();
+    //    let mut i = 0;
 
-        if board.can_detect_threefold_repetition && board.ply - board.state().last_irreversible_ply >= 4 {
-            let mut count = 0;
-            let mut current_ply = (board.ply - 2) as i32;
+    //    while let Some(entry) = board.transposition_table.probe(current_hash) {
+    //        if entry.hash != current_hash || i >= depth {
+    //            break;
+    //        }
 
-            while current_ply >= board.state().last_irreversible_ply as i32 {
-                if board.states[current_ply as usize].zobrist_hash == board.zobrist_hash {
-                    count += 1;
-                    if count >= 2 || (count == 1 && board.ply > self.root_ply + 2) {
-                        return true;
-                    }
-                }
-                current_ply -= 2;
-            }
-        }
+    //        let pv_move = entry.best_move;
+    //        pv.push(pv_move);
 
-        false
-    }
+    //        board.make_move(pv_move);
+    //        current_hash = board.zobrist_hash;
+    //        i += 1;
+    //    }
 
-    pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
-        let mut current_hash = board.zobrist_hash;
+    //    // Unmake all the moves to restore the original board state
+    //    for &mov in pv.iter().rev() {
+    //        board.unmake_move(mov);
+    //    }
+    //    pv
+    //}
+    pub fn extract_pv(&self, depth: u32) -> Vec<Move> {
         let mut pv = Vec::new();
-        let mut i = 0;
-
-        while let Some(entry) = board.transposition_table.probe(current_hash) {
-            if entry.hash != current_hash || i >= depth {
+        for i in 0..depth as usize {
+            if let Some(mov) = self.pv_table[0][i] {
+                pv.push(mov);
+            } else {
                 break;
             }
-
-            let pv_move = entry.best_move;
-            pv.push(pv_move);
-
-            // Make the move on the board to get the next position
-            board.make_move(pv_move);
-            current_hash = board.zobrist_hash;
-            i += 1;
-        }
-
-        // Unmake all the moves to restore the original board state
-        for &mov in pv.iter().rev() {
-            board.unmake_move(mov);
         }
         pv
     }
@@ -437,8 +431,8 @@ impl Search {
     }
 
     fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
-        if let Some(pv_mov) = self.pv.get(ply as usize) {
-            if mov == *pv_mov {
+        if let Some(pv_mov) = self.pv_table[ply as usize][0] {
+            if mov == pv_mov {
                 return MAX_EVAL;
             }
         }
@@ -534,6 +528,7 @@ impl Default for Search {
             root_ply: 0,
             start_time: Instant::now(),
             pv: Vec::new(),
+            pv_table: [[None; MAX_DEPTH]; MAX_DEPTH],
             max_time: 0,
             killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             should_quit: Arc::new(AtomicBool::new(false)),

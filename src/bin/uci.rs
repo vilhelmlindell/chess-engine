@@ -104,6 +104,9 @@ impl Uci {
             "isready" => self.synchronize(),
             "position" => self.set_position(full_command),
             "go" => self.go(full_command),
+            "fen" => {
+                println!("{}", self.board.fen());
+            },
             "stop" => {
                 self.should_quit_search.store(true, Ordering::SeqCst);
             }

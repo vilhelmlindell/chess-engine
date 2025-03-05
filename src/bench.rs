@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::{board::Board, search::{search, Search, SearchMode, SearchParams}};
 
 /// Positions used when running engine benchmarks.
-const BENCHMARK_FENS: [&str; 55] = [
+const BENCHMARK_FENS: [&str; 56] = [
     // From [Stormphrax](https://github.com/Ciekce/Stormphrax/blob/correct_ep_handling/src/bench.cpp#L29).
     "q5k1/5ppp/1r3bn1/1B6/P1N2P2/BQ2P1P1/5K1P/8 b - - 2 34",
     "6r1/5k2/p1b1r2p/1pB1p1p1/1Pp3PP/2P1R1K1/2P2P2/3R4 w - - 1 36",
@@ -29,7 +29,7 @@ const BENCHMARK_FENS: [&str; 55] = [
     // 3-fold repetition; best move here is c2c1
     "7k/2QQ4/8/8/8/PPP5/2q5/K7 b - - 0 1",
     // 50 move rule; best move here is h2h3
-    //"7k/8/R7/1R6/7K/8/7P/8 w - - 99 1",
+    "7k/8/R7/1R6/7K/8/7P/8 w - - 99 1",
     // A stalemate is better than losing; best move here is a1a7
     "k5q1/p7/8/6q1/6q1/6q1/8/Q6K w - - 0 1",
     // Under-promotion; f2f1n is best

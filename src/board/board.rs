@@ -109,17 +109,25 @@ impl Board {
             Side::Black => fen.push('b'),
         };
         fen.push(' ');
+        let mut no_castling = true;
         if self.state().castling_rights[Side::White].kingside {
+            no_castling = false;
             fen.push('K');
         }
         if self.state().castling_rights[Side::White].queenside {
+            no_castling = false;
             fen.push('Q');
         }
         if self.state().castling_rights[Side::Black].kingside {
+            no_castling = false;
             fen.push('k');
         }
         if self.state().castling_rights[Side::Black].kingside {
+            no_castling = false;
             fen.push('q');
+        }
+        if no_castling {
+            fen.push('-');
         }
         fen.push(' ');
         if let Some(square) = self.state().en_passant_square {
@@ -135,12 +143,12 @@ impl Board {
         }
         fen.push(' ');
         fen.push_str(&self.state().halfmove_clock.to_string());
-        fen.push_str(&(self.ply / 2).to_string());
+        fen.push(' ');
+        fen.push_str(&(1 + self.ply / 2).to_string());
         fen
     }
     pub fn start_pos() -> Self {
         let mut board = Self::from_fen(STARTING_FEN);
-        board.can_detect_threefold_repetition = true;
         return board;
     }
 
@@ -222,6 +230,7 @@ impl Board {
             }
         }
         self.zobrist_hash = get_zobrist_hash(self);
+        self.state_mut().zobrist_hash = self.zobrist_hash;
     }
     pub fn make_move(&mut self, mov: Move) {
         let mut state = BoardState::from_state(self.state());
@@ -311,6 +320,7 @@ impl Board {
             state.halfmove_clock += 1;
         }
         self.ply += 1;
+        state.zobrist_hash = self.zobrist_hash;
         self.states.push(state);
     }
     pub fn unmake_move(&mut self, mov: Move) {
@@ -458,6 +468,31 @@ impl Board {
     #[inline(always)]
     pub fn aligned(square1: usize, square2: usize, square3: usize) -> bool {
         get_line_ray(square1, square2) & Bitboard::from_square(square3) != 0
+    }
+
+    #[inline(always)]
+    pub fn is_repetition(&self, twofold: bool) -> bool {
+        let mut counter = 0;
+        let moves_since_zeroing = self.ply - self.state().last_irreversible_ply + 1;
+
+        // Only start checking for repetitions if we're at least 4 plies beyond the last irreversible move
+        if moves_since_zeroing >= 4 {
+            for state in self.states.iter().rev().take(moves_since_zeroing as usize).skip(2).step_by(2) {
+                if state.zobrist_hash == self.zobrist_hash {
+                    if twofold {
+                        return true;
+                    }
+
+                    if counter == 1 {
+                        return true;
+                    }
+
+                    counter += 1;
+                }
+            }
+        }
+
+        false
     }
     fn initialize_bitboards(&mut self) {
         for square in 0..64 {
@@ -622,10 +657,10 @@ impl Default for Board {
             zobrist_hash: 0,
             opening_move_count: 0,
             ply: 0,
-            can_detect_threefold_repetition: false,
             orthogonal_pinmask: Bitboard(0),
             diagonal_pinmask: Bitboard(0),
             checkmask: Bitboard(0),
+            can_detect_threefold_repetition: true,
         }
     }
 }
@@ -813,5 +848,43 @@ mod tests {
         let board = Board::from_fen("4k3/8/3QK3/8/8/8/8/8 w - - 0 1");
         println!("{}", Bitboard(Board::queen_attacks(board.piece_squares[Piece::WhiteQueen].lsb() as u64, board.occupied_squares.0)));
         println!("{}", board.piece_squares[Piece::WhiteQueen]);
+    }
+    #[test]
+    fn test_zobrist() {
+        let mut board = Board::from_fen("4k3/2q5/8/8/8/8/2Q5/4K3 w - - 0 1");
+        println!("{}", board.fen());
+        let before = board.zobrist_hash;
+        let moves = vec![
+            Move::new(10, 11, MoveType::Normal),
+            Move::new(50, 51, MoveType::Normal),
+            Move::new(11, 10, MoveType::Normal),
+            Move::new(51, 50, MoveType::Normal),
+        ];
+        for mov in moves {
+            board.make_move(mov);
+        }
+        println!("{}", board.fen());
+        assert_eq!(before, board.zobrist_hash);
+    }
+    #[test]
+    fn test_repetition() {
+        let mut board = Board::from_fen("4k3/2q5/8/8/8/8/2Q5/4K3 w - - 0 1");
+        let moves = vec![
+            Move::new(10, 11, MoveType::Normal),
+            Move::new(50, 51, MoveType::Normal),
+            Move::new(11, 10, MoveType::Normal),
+            Move::new(51, 50, MoveType::Normal),
+            Move::new(10, 11, MoveType::Normal),
+            Move::new(50, 51, MoveType::Normal),
+            Move::new(11, 10, MoveType::Normal),
+            Move::new(51, 50, MoveType::Normal),
+        ];
+        //println!("hash: {}", board.zobrist_hash);
+        for mov in moves {
+            board.make_move(mov);
+            println!("hash: {}", board.zobrist_hash);
+        }
+        //println!("{}", board.states.len());
+        assert!(board.is_repetition(false));
     }
 }
