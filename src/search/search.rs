@@ -102,6 +102,25 @@ impl Search {
 
             let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
+            // Aspiration windows for deeper searches
+            //if depth >= 4 {
+            //    let window = 50;
+            //    let mut alpha = eval - window;
+            //    let mut beta = eval + window;
+
+            //    loop {
+            //        let score = self.pvs::<true>(board, depth, alpha, beta, 0);
+
+            //        if score <= alpha {
+            //            alpha = -MAX_EVAL;
+            //        } else if score >= beta {
+            //            beta = MAX_EVAL;
+            //        } else {
+            //            break;
+            //        }
+            //    }
+            //}
+
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
             self.result.pv = self.extract_pv();
@@ -419,7 +438,7 @@ impl Search {
     }
 
     fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
-        if let Some(pv_mov) = self.pv_table[ply as usize][ply as usize] {
+        if let Some(pv_mov) = self.pv_table[ply as usize][0] {
             if mov == pv_mov {
                 return MAX_EVAL;
             }
