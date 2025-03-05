@@ -101,31 +101,32 @@ impl Search {
                 break;
             }
 
-            //self.pv_table = [[None; MAX_DEPTH]; MAX_DEPTH];
-            //self.pv_lengths = [0; MAX_DEPTH];
-
             let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+
+            if self.should_quit(depth) {
+                break;
+            }
 
             //let new_pv = self.extract_pv(depth, board);
 
             // Aspiration windows for deeper searches
-            if depth >= 4 {
-                let window = 50;
-                let mut alpha = eval - window;
-                let mut beta = eval + window;
+            //if depth >= 4 {
+            //    let window = 50;
+            //    let mut alpha = eval - window;
+            //    let mut beta = eval + window;
 
-                loop {
-                    let score = self.pvs::<true>(board, depth, alpha, beta, 0);
+            //    loop {
+            //        let score = self.pvs::<true>(board, depth, alpha, beta, 0);
 
-                    if score <= alpha {
-                        alpha = -MAX_EVAL;
-                    } else if score >= beta {
-                        beta = MAX_EVAL;
-                    } else {
-                        break;
-                    }
-                }
-            }
+            //        if score <= alpha {
+            //            alpha = -MAX_EVAL;
+            //        } else if score >= beta {
+            //            beta = MAX_EVAL;
+            //        } else {
+            //            break;
+            //        }
+            //    }
+            //}
 
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
@@ -138,6 +139,8 @@ impl Search {
         self.result.clone()
     }
     fn pvs<const ALLOW_NULL_MOVE: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
+        self.pv_lengths[ply as usize] = 0;
+
         if self.should_quit(depth) {
             return 0;
         }
@@ -227,6 +230,7 @@ impl Search {
         let mut moves = generate_moves(board);
 
         // Check for terminal positions
+        // TODO: Remove this if by setting score to mate score
         if moves.is_empty() {
             let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
             return if board.attacked(king_square) {
@@ -257,19 +261,19 @@ impl Search {
 
             if i == 0 {
                 eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
-            //} else if i >= 3 && depth >= 3 && !full_depth_search {
-            //    let r = 1;
-            //    let reduced_depth = (depth - 1 - r).max(1);
+            } else if i >= 3 && depth >= 3 && !full_depth_search {
+                let r = 1;
+                let reduced_depth = (depth - 1 - r).max(1);
 
-            //    eval = -self.pvs::<true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
+                eval = -self.pvs::<true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
 
-            //    if eval > alpha {
-            //        eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+                if eval > alpha {
+                    eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
 
-            //        if eval > alpha && eval < beta {
-            //            eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
-            //        }
-            //    }
+                    if eval > alpha && eval < beta {
+                        eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
+                    }
+                }
             } else {
                 // Non-PV nodes - scout with null window first
                 eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
@@ -282,13 +286,15 @@ impl Search {
 
             board.unmake_move(mov);
 
+            if self.should_quit(ply) {
+                return 0;
+            }
+
             if eval > best_eval {
                 best_eval = eval;
                 best_move = Some(mov);
 
                 if eval > alpha {
-                    evaluation_bound = NodeType::Exact;
-                    alpha = eval;
                     self.pv_table[ply as usize][0] = best_move;
 
                     let (left, right) = self.pv_table.split_at_mut(ply as usize + 1);
@@ -300,6 +306,9 @@ impl Search {
                     }
 
                     self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
+
+                    evaluation_bound = NodeType::Exact;
+                    alpha = eval;
                 }
             }
 
@@ -355,6 +364,10 @@ impl Search {
             board.make_move(mov);
             let eval = -self.quiescence_search(board, -beta, -alpha, ply + 1);
             board.unmake_move(mov);
+
+            if self.should_quit(ply) {
+                return 0;
+            }
 
             if eval >= beta {
                 return beta;
