@@ -284,9 +284,13 @@ impl Search {
                 if eval > alpha {
                     evaluation_bound = NodeType::Exact;
                     alpha = eval;
-                    self.pv_table[ply as usize][0] = best_move;
-                    for j in 1..MAX_DEPTH as u32 {
-                        self.pv_table[ply as usize][j as usize] = self.pv_table[(ply + 1) as usize][j as usize - 1];
+                    //self.pv_table[ply as usize][ply as usize] = best_move;
+                    //for j in 1..MAX_DEPTH as u32 {
+                    //    self.pv_table[ply as usize][j as usize] = self.pv_table[(ply + 1) as usize][j as usize - 1];
+                    //}
+                    self.pv_table[ply as usize][ply as usize] = best_move;
+                    for i in (ply + 1)..MAX_DEPTH as u32 {
+                        self.pv_table[ply as usize][i as usize] = self.pv_table[(ply + 1) as usize][i as usize];
                     }
                 }
             }
@@ -389,7 +393,6 @@ impl Search {
             )
             .expect(&format!("Syzygy tablebase probe failed, fen: {}", board.fen()));
     }
-
     //pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
     //    let mut current_hash = board.zobrist_hash;
     //    let mut pv = Vec::new();
@@ -431,7 +434,7 @@ impl Search {
     }
 
     fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
-        if let Some(pv_mov) = self.pv_table[ply as usize][0] {
+        if let Some(pv_mov) = self.pv_table[ply as usize][ply as usize] {
             if mov == pv_mov {
                 return MAX_EVAL;
             }
