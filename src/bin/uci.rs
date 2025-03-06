@@ -167,6 +167,7 @@ impl Uci {
                 all_moves.iter().enumerate().for_each(|(i, val)| {
                     if val.to_string() == *mov.to_string() {
                         board.make_move(all_moves[i]);
+                        println!("{} {}", mov.to_string(), board.fen());
                         //println!("{}: {}", val.to_string(), self.board.evaluate());
                     }
                 })

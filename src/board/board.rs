@@ -256,16 +256,16 @@ impl Board {
         let castling_rights_bits_after = Self::castling_rights_bits(state.castling_rights);
         self.zobrist_hash ^= get_zobrist_castling_rights(castling_rights_bits_before) ^ get_zobrist_castling_rights(castling_rights_bits_after);
 
+        if self.squares[mov.to()].is_some() || self.squares[mov.from()].expect("Invalid move: no piece on from square").piece_type() == PieceType::Pawn {
+            state.halfmove_clock = 0;
+            state.last_irreversible_ply = self.ply;
+        } else {
+            state.halfmove_clock += 1;
+        }
+
         if let Some(captured_piece) = self.squares[mov.to()] {
             self.clear_square(mov.to());
             state.captured_piece = Some(captured_piece);
-            state.halfmove_clock = 0;
-            state.last_irreversible_ply = self.ply;
-        }
-
-        if self.squares[mov.from()].expect("Invalid move: no piece on from square").piece_type() == PieceType::Pawn {
-            state.halfmove_clock = 0;
-            state.last_irreversible_ply = self.ply;
         }
 
         if let Some(prev_en_passant_square) = self.state().en_passant_square {
@@ -316,9 +316,9 @@ impl Board {
         //self.orthogonal_pinmask = get_orthogonal_rays(square);
         //self.diagonal_pinmask = get_diagonal_rays(square);
 
-        if self.state().halfmove_clock != 0 {
-            state.halfmove_clock += 1;
-        }
+        //if self.state().halfmove_clock != 0 {
+        //    state.halfmove_clock += 1;
+        //}
         self.ply += 1;
         state.zobrist_hash = self.zobrist_hash;
         self.states.push(state);

@@ -56,45 +56,47 @@ impl Search {
         self.pv_lengths = [0; MAX_DEPTH];
         //board.transposition_table.clear();
 
-        //if search_params.use_book {
-        //    if let Some(book_move) = get_book_move(board, 1.0) {
-        //        self.result.pv.push(book_move);
-        //        return self.result.clone();
-        //    }
-        //}
+        if search_params.use_book {
+            if let Some(book_move) = get_book_move(board, 1.0) {
+                self.result.pv.push(book_move);
+                return self.result.clone();
+            }
+        }
 
         self.params = search_params;
         self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
         self.root_ply = board.ply;
 
-        //if board.occupied_squares.count_ones() <= 5 {
-        //    //println!("syzygy: {}", board.fen());
-        //    let result = self.probe_syzygy_root(board);
-        //    match result.root {
-        //        pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
-        //        pyrrhic_rs::DtzProbeValue::Checkmate => return self.result.clone(),
-        //        pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
-        //        pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
-        //            let move_type = match dtz_result.promotion {
-        //                pyrrhic_rs::Piece::Knight => MoveType::KnightPromotion,
-        //                pyrrhic_rs::Piece::Bishop => MoveType::BishopPromotion,
-        //                pyrrhic_rs::Piece::Rook => MoveType::RookPromotion,
-        //                pyrrhic_rs::Piece::Queen => MoveType::QueenPromotion,
-        //                _ => {
-        //                    if dtz_result.ep {
-        //                        MoveType::EnPassant
-        //                    } else {
-        //                        MoveType::Normal
-        //                    }
-        //                }
-        //            };
-        //            let mov = Move::new(flip_rank(dtz_result.from_square as usize), flip_rank(dtz_result.to_square as usize), move_type);
-        //            self.result.pv.push(mov);
-        //            return self.result.clone();
-        //        }
-        //    }
-        //}
+        if board.occupied_squares.count_ones() <= 5 {
+            //println!("syzygy: {}", board.fen());
+            let result = self.probe_syzygy_root(board);
+            match result.root {
+                pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
+                pyrrhic_rs::DtzProbeValue::Checkmate => return self.result.clone(),
+                pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
+                pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
+                    let move_type = match dtz_result.promotion {
+                        pyrrhic_rs::Piece::Knight => MoveType::KnightPromotion,
+                        pyrrhic_rs::Piece::Bishop => MoveType::BishopPromotion,
+                        pyrrhic_rs::Piece::Rook => MoveType::RookPromotion,
+                        pyrrhic_rs::Piece::Queen => MoveType::QueenPromotion,
+                        _ => {
+                            if dtz_result.ep {
+                                MoveType::EnPassant
+                            } else {
+                                MoveType::Normal
+                            }
+                        }
+                    };
+                    let mov = Move::new(flip_rank(dtz_result.from_square as usize), flip_rank(dtz_result.to_square as usize), move_type);
+                    self.result.pv.clear();
+                    self.result.pv.push(mov);
+                    Search::print_info(&self.result);
+                    return self.result.clone();
+                }
+            }
+        }
 
         self.max_time = match search_params.search_mode {
             SearchMode::Infinite => u128::max_value(),
@@ -103,13 +105,7 @@ impl Search {
         };
 
         for depth in 1..=MAX_DEPTH as u32 {
-            if self.should_quit(depth) {
-                break;
-            }
-
             let mut eval;
-
-            //eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
 
             // Aspiration windows for deeper searches
             if depth >= 4 {
@@ -160,12 +156,11 @@ impl Search {
             return 0;
         }
 
-        // Check the 50-move rule (halfmove clock)
         if board.state().halfmove_clock >= 100 {
             return 0;
         }
 
-        if board.is_repetition(ply > 2) {
+        if !is_root && board.is_repetition(on_pv) {
             return 0;
         }
 
@@ -199,30 +194,30 @@ impl Search {
 
         //let hash_move = tt_hit.map(|entry| entry.best_move);
 
-        //if board.occupied_squares.count_ones() <= 5 {
-        //    let result = self.probe_syzygy_root(board);
-        //    match result.root {
-        //        pyrrhic_rs::DtzProbeValue::Stalemate => return 0,
-        //        pyrrhic_rs::DtzProbeValue::Checkmate => {
-        //            let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
-        //            if board.attacked(king_square) {
-        //                return -MAX_EVAL + ply as i32;
-        //            } else {
-        //                return MAX_EVAL - ply as i32;
-        //            };
-        //        }
-        //        pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
-        //        pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
-        //            return match dtz_result.wdl {
-        //                pyrrhic_rs::WdlProbeResult::Loss => -MAX_EVAL,
-        //                pyrrhic_rs::WdlProbeResult::BlessedLoss => -MAX_EVAL + 10000,
-        //                pyrrhic_rs::WdlProbeResult::Draw => 0,
-        //                pyrrhic_rs::WdlProbeResult::CursedWin => MAX_EVAL - 10000,
-        //                pyrrhic_rs::WdlProbeResult::Win => MAX_EVAL,
-        //            };
-        //        }
-        //    }
-        //}
+        if board.occupied_squares.count_ones() <= 5 {
+            let result = self.probe_syzygy_root(board);
+            match result.root {
+                pyrrhic_rs::DtzProbeValue::Stalemate => return 0,
+                pyrrhic_rs::DtzProbeValue::Checkmate => {
+                    let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
+                    if board.attacked(king_square) {
+                        return -MAX_EVAL + ply as i32;
+                    } else {
+                        return MAX_EVAL - ply as i32;
+                    };
+                }
+                pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
+                pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
+                    return match dtz_result.wdl {
+                        pyrrhic_rs::WdlProbeResult::Loss => -MAX_EVAL + ply as i32,
+                        pyrrhic_rs::WdlProbeResult::BlessedLoss => -MAX_EVAL + 10000 + ply as i32,
+                        pyrrhic_rs::WdlProbeResult::Draw => 0,
+                        pyrrhic_rs::WdlProbeResult::CursedWin => MAX_EVAL - 10000 - ply as i32,
+                        pyrrhic_rs::WdlProbeResult::Win => MAX_EVAL - ply as i32,
+                    };
+                }
+            }
+        }
 
         //let static_eval = evaluate(board);
         //let improving = ply >= 2 && static_eval > self.previous_static_eval;
@@ -310,19 +305,31 @@ impl Search {
                 best_move = Some(mov);
 
                 if eval > alpha {
-                    if !IS_NULL {
-                        self.pv_table[ply as usize][0] = best_move;
+                    self.pv_table[ply as usize][0] = Some(mov);
 
-                        let (left, right) = self.pv_table.split_at_mut(ply as usize + 1);
-
-                        if let (Some(dest_row), Some(src_row)) = (left.last_mut(), right.first()) {
-                            let dest = &mut dest_row[1..(self.pv_lengths[ply as usize + 1] + 1)];
-                            let src = &src_row[0..self.pv_lengths[ply as usize + 1]];
-                            dest.copy_from_slice(src);
-                        }
-
-                        self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
+                    for j in 0..self.pv_lengths[ply as usize + 1] {
+                        self.pv_table[ply as usize][j + 1] = self.pv_table[ply as usize + 1][j];
                     }
+
+                    self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
+                    //if !IS_NULL {
+                    //    self.pv_table[ply as usize][0] = best_move;
+
+                    //    let (left, right) = self.pv_table.split_at_mut(ply as usize + 1);
+
+                    //    if let (Some(dest_row), Some(src_row)) = (left.last_mut(), right.first()) {
+                    //        let dest = &mut dest_row[1..(self.pv_lengths[ply as usize + 1] + 1)];
+                    //        let src = &src_row[0..self.pv_lengths[ply as usize + 1]];
+                    //        dest.copy_from_slice(src);
+                    //    }
+                    //    self.pv_table[ply as usize][0] = Some(mov);
+                    //
+                    //    for j in 0..self.pv_lengths[ply as usize + 1] {
+                    //        self.pv_table[ply as usize][j + 1] = self.pv_table[ply as usize + 1][j];
+                    //    }
+
+                    //    self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
+                    //}
 
                     evaluation_bound = Bound::Exact;
                     alpha = eval;
@@ -431,32 +438,8 @@ impl Search {
             )
             .expect(&format!("Syzygy tablebase probe failed, fen: {}", board.fen()));
     }
-    //pub fn extract_pv(&mut self, depth: u32, board: &mut Board) -> Vec<Move> {
-    //    let mut current_hash = board.zobrist_hash;
-    //    let mut pv = Vec::new();
-    //    let mut i = 0;
-
-    //    while let Some(entry) = board.transposition_table.probe(current_hash) {
-    //        if entry.hash != current_hash || i >= depth {
-    //            break;
-    //        }
-
-    //        let pv_move = entry.best_move;
-    //        pv.push(pv_move);
-
-    //        board.make_move(pv_move);
-    //        current_hash = board.zobrist_hash;
-    //        i += 1;
-    //    }
-
-    //    // Unmake all the moves to restore the original board state
-    //    for &mov in pv.iter().rev() {
-    //        board.unmake_move(mov);
-    //    }
-    //    pv
-    //}
     pub fn extract_pv(&self) -> Vec<Move> {
-        let mut pv = Vec::new();
+        let mut pv = Vec::with_capacity(self.pv_lengths[0]);
         for i in 0..self.pv_lengths[0] {
             if let Some(mov) = self.pv_table[0][i] {
                 pv.push(mov);
