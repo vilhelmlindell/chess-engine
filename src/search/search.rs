@@ -105,13 +105,23 @@ impl Search {
         };
 
         for depth in 1..=MAX_DEPTH as u32 {
+            //let eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
             let mut eval;
 
             // Aspiration windows for deeper searches
-            if depth >= 4 {
-                const ASPIRATION_WINDOW: i32 = 50;
-                let mut alpha = self.result.highest_eval - ASPIRATION_WINDOW;
-                let mut beta = self.result.highest_eval + ASPIRATION_WINDOW;
+            if depth >= 3 {
+                // Start with previous eval as center of window
+                let prev_eval = self.result.highest_eval;
+
+                // Use dynamic window size based on depth
+                // Deeper searches use wider initial windows
+                let window_size = 20 + depth as i32 * 5;
+
+                let mut alpha = prev_eval - window_size;
+                let mut beta = prev_eval + window_size;
+
+                // Fail count to track number of window adjustments
+                let mut fail_count = 0;
 
                 loop {
                     eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, alpha, beta, 0);
@@ -120,15 +130,48 @@ impl Search {
                         break;
                     }
 
+                    // Check if we failed low (eval <= alpha)
                     if eval <= alpha {
-                        alpha = -MAX_EVAL;
-                    } else if eval >= beta {
-                        beta = MAX_EVAL;
-                    } else {
-                        break;
+                        fail_count += 1;
+
+                        // Widen window progressively
+                        // Small widening for first fail, then more aggressive
+                        if fail_count == 1 {
+                            alpha -= window_size * 2;
+                        } else if fail_count == 2 {
+                            alpha -= window_size * 4;
+                        } else {
+                            // After multiple fails, go to full window
+                            alpha = -MAX_EVAL;
+                        }
+
+                        // Keep beta unchanged on fail low
+                        continue;
                     }
+
+                    // Check if we failed high (eval >= beta)
+                    if eval >= beta {
+                        fail_count += 1;
+
+                        // Similar progressive widening for beta
+                        if fail_count == 1 {
+                            beta += window_size * 2;
+                        } else if fail_count == 2 {
+                            beta += window_size * 4;
+                        } else {
+                            // After multiple fails, go to full window
+                            beta = MAX_EVAL;
+                        }
+
+                        // Keep alpha unchanged on fail high
+                        continue;
+                    }
+
+                    // If we get here, search succeeded within the window
+                    break;
                 }
             } else {
+                // Full window search for shallow depths
                 eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
             }
 
@@ -271,19 +314,19 @@ impl Search {
 
             if i == 0 {
                 eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
-            } else if i >= 3 && depth >= 3 && !full_depth_search {
-                let r = 1;
-                let reduced_depth = (depth - 1 - r).max(1);
+            //} else if i >= 3 && depth >= 3 && !full_depth_search {
+            //    let r = 1;
+            //    let reduced_depth = (depth - 1 - r).max(1);
 
-                eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
+            //    eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
 
-                if eval > alpha {
-                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+            //    if eval > alpha {
+            //        eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
 
-                    if on_pv && eval > alpha && eval < beta {
-                        eval = -self.pvs::<{ NodeType::PV as u8 }, true>(board, depth - 1, -beta, -alpha, ply + 1);
-                    }
-                }
+            //        if on_pv && eval > alpha && eval < beta {
+            //            eval = -self.pvs::<{ NodeType::PV as u8 }, true>(board, depth - 1, -beta, -alpha, ply + 1);
+            //        }
+            //    }
             } else {
                 // Non-PV nodes - scout with null window first
                 eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
@@ -305,31 +348,18 @@ impl Search {
                 best_move = Some(mov);
 
                 if eval > alpha {
-                    self.pv_table[ply as usize][0] = Some(mov);
+                    if !IS_NULL {
+                        self.pv_table[ply as usize][0] = best_move;
 
-                    for j in 0..self.pv_lengths[ply as usize + 1] {
-                        self.pv_table[ply as usize][j + 1] = self.pv_table[ply as usize + 1][j];
+                        let (left, right) = self.pv_table.split_at_mut(ply as usize + 1);
+
+                        if let (Some(dest_row), Some(src_row)) = (left.last_mut(), right.first()) {
+                            let dest = &mut dest_row[1..(self.pv_lengths[ply as usize + 1] + 1)];
+                            let src = &src_row[0..self.pv_lengths[ply as usize + 1]];
+                            dest.copy_from_slice(src);
+                        }
+                        self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
                     }
-
-                    self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
-                    //if !IS_NULL {
-                    //    self.pv_table[ply as usize][0] = best_move;
-
-                    //    let (left, right) = self.pv_table.split_at_mut(ply as usize + 1);
-
-                    //    if let (Some(dest_row), Some(src_row)) = (left.last_mut(), right.first()) {
-                    //        let dest = &mut dest_row[1..(self.pv_lengths[ply as usize + 1] + 1)];
-                    //        let src = &src_row[0..self.pv_lengths[ply as usize + 1]];
-                    //        dest.copy_from_slice(src);
-                    //    }
-                    //    self.pv_table[ply as usize][0] = Some(mov);
-                    //
-                    //    for j in 0..self.pv_lengths[ply as usize + 1] {
-                    //        self.pv_table[ply as usize][j + 1] = self.pv_table[ply as usize + 1][j];
-                    //    }
-
-                    //    self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
-                    //}
 
                     evaluation_bound = Bound::Exact;
                     alpha = eval;
@@ -362,9 +392,9 @@ impl Search {
 
         // Currently not required since every move in quiescence is a capture and therefore
         // irreversible
-        //if board.is_repetition(ply > 2) {
-        //    return 0;
-        //}
+        if board.is_repetition(ply > 2) {
+            return 0;
+        }
 
         // Stand pat evaluation
         let stand_pat = evaluate(board);
