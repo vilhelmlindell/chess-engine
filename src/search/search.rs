@@ -8,11 +8,12 @@ use crate::board::{Board, Side};
 use crate::evaluation::evaluate;
 use crate::move_generation::generate_moves;
 use crate::search::book_moves::get_book_move;
-use crate::search::transposition_table::{NodeType, TranspositionEntry};
+use crate::search::transposition_table::{Bound, TranspositionEntry};
 use core::simd;
 use std::char::MAX;
 use std::cmp::Ordering;
 use std::i32::{self};
+use std::ops::Deref;
 use std::simd::num::SimdUint;
 use std::simd::u64x8;
 use std::sync::atomic::AtomicBool;
@@ -22,10 +23,15 @@ use std::time::{Duration, Instant};
 pub const MAX_DEPTH: usize = 100;
 pub const KILLER_MOVE_SLOTS: usize = 3;
 
-const HASH_MOVE_SCORE: i32 = 4000;
-const CAPTURE_BASE_SCORE: i32 = 1000;
-const KILLER_MOVE_SCORE: i32 = 800;
 const MAX_EVAL: i32 = 1000000;
+
+#[repr(u8)]
+#[derive(Clone, Copy)]
+pub enum NodeType {
+    Root,
+    PV,
+    NonPV,
+}
 
 pub struct Search {
     pub params: SearchParams,
@@ -48,7 +54,7 @@ impl Search {
         self.result = SearchResult::default();
         self.pv_table = [[None; MAX_DEPTH]; MAX_DEPTH];
         self.pv_lengths = [0; MAX_DEPTH];
-        board.transposition_table.clear();
+        //board.transposition_table.clear();
 
         //if search_params.use_book {
         //    if let Some(book_move) = get_book_move(board, 1.0) {
@@ -101,32 +107,38 @@ impl Search {
                 break;
             }
 
-            let eval = self.pvs::<true>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+            let mut eval;
+
+            //eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+
+            // Aspiration windows for deeper searches
+            if depth >= 4 {
+                const ASPIRATION_WINDOW: i32 = 50;
+                let mut alpha = self.result.highest_eval - ASPIRATION_WINDOW;
+                let mut beta = self.result.highest_eval + ASPIRATION_WINDOW;
+
+                loop {
+                    eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, alpha, beta, 0);
+
+                    if self.should_quit(depth) {
+                        break;
+                    }
+
+                    if eval <= alpha {
+                        alpha = -MAX_EVAL;
+                    } else if eval >= beta {
+                        beta = MAX_EVAL;
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+            }
 
             if self.should_quit(depth) {
                 break;
             }
-
-            //let new_pv = self.extract_pv(depth, board);
-
-            // Aspiration windows for deeper searches
-            //if depth >= 4 {
-            //    let window = 50;
-            //    let mut alpha = eval - window;
-            //    let mut beta = eval + window;
-
-            //    loop {
-            //        let score = self.pvs::<true>(board, depth, alpha, beta, 0);
-
-            //        if score <= alpha {
-            //            alpha = -MAX_EVAL;
-            //        } else if score >= beta {
-            //            beta = MAX_EVAL;
-            //        } else {
-            //            break;
-            //        }
-            //    }
-            //}
 
             self.result.highest_eval = eval;
             self.result.depth_reached = depth;
@@ -138,14 +150,15 @@ impl Search {
 
         self.result.clone()
     }
-    fn pvs<const ALLOW_NULL_MOVE: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
+    fn pvs<const NODE_TYPE: u8, const IS_NULL: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
+        let on_pv = NODE_TYPE != NodeType::NonPV as u8;
+        let is_root = NODE_TYPE == NodeType::Root as u8;
+
         self.pv_lengths[ply as usize] = 0;
 
         if self.should_quit(depth) {
             return 0;
         }
-
-        self.result.nodes += 1;
 
         // Check the 50-move rule (halfmove clock)
         if board.state().halfmove_clock >= 100 {
@@ -156,24 +169,26 @@ impl Search {
             return 0;
         }
 
+        if depth == 0 {
+            return self.quiescence_search(board, alpha, beta, ply);
+        }
+
         alpha = alpha.max(-MAX_EVAL + ply as i32);
         beta = beta.min(MAX_EVAL - ply as i32);
         if alpha >= beta {
             return alpha;
         }
 
-        if depth == 0 {
-            return self.quiescence_search(board, alpha, beta, ply);
-        }
+        self.result.nodes += 1;
 
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-            if entry.hash == board.zobrist_hash && entry.depth >= depth {
+            if entry.hash == board.zobrist_hash && entry.depth >= depth && !is_root {
                 self.result.transpositions += 1;
 
                 match entry.node_type {
-                    NodeType::Exact => return entry.eval,
-                    NodeType::LowerBound => alpha = alpha.max(entry.eval),
-                    NodeType::UpperBound => beta = beta.min(entry.eval),
+                    Bound::Exact => return entry.eval,
+                    Bound::Lower => alpha = alpha.max(entry.eval),
+                    Bound::Upper => beta = beta.min(entry.eval),
                 }
 
                 if alpha >= beta {
@@ -214,9 +229,9 @@ impl Search {
         //self.previous_static_eval = static_eval;
 
         let reduction = 2;
-        if ALLOW_NULL_MOVE && !board.in_check() && depth > reduction + 1 {
+        if !IS_NULL && !board.in_check() && depth > reduction + 1 {
             board.make_null_move();
-            let null_move_eval = -self.pvs::<false>(board, depth - 1 - reduction, -beta, -beta + 1, ply + 1);
+            let null_move_eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1 - reduction, -beta, -beta + 1, ply + 1);
             board.unmake_null_move();
 
             if null_move_eval >= beta {
@@ -243,8 +258,8 @@ impl Search {
         self.order_moves::<false>(board, &mut moves, ply);
 
         let mut best_move = None;
-        let mut best_eval = -MAX_EVAL;
-        let mut evaluation_bound = NodeType::UpperBound;
+        let mut best_eval = -MAX_EVAL + ply as i32;
+        let mut evaluation_bound = Bound::Upper;
         let mut extensions = 0;
 
         // Principal Variation Search
@@ -260,27 +275,27 @@ impl Search {
             let full_depth_search = board.in_check() || self.is_killer_move(mov, ply);
 
             if i == 0 {
-                eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
-            //} else if i >= 3 && depth >= 3 && !full_depth_search {
-            //    let r = 1;
-            //    let reduced_depth = (depth - 1 - r).max(1);
+                eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
+            } else if i >= 3 && depth >= 3 && !full_depth_search {
+                let r = 1;
+                let reduced_depth = (depth - 1 - r).max(1);
 
-            //    eval = -self.pvs::<true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
+                eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
 
-            //    if eval > alpha {
-            //        eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+                if eval > alpha {
+                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
 
-            //        if eval > alpha && eval < beta {
-            //            eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
-            //        }
-            //    }
+                    if on_pv && eval > alpha && eval < beta {
+                        eval = -self.pvs::<{ NodeType::PV as u8 }, true>(board, depth - 1, -beta, -alpha, ply + 1);
+                    }
+                }
             } else {
                 // Non-PV nodes - scout with null window first
-                eval = -self.pvs::<true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+                eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
 
                 // Re-search with full window if the move looks promising
-                if eval > alpha && eval < beta {
-                    eval = -self.pvs::<true>(board, depth - 1, -beta, -alpha, ply + 1);
+                if on_pv && eval > alpha && eval < beta {
+                    eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
                 }
             }
 
@@ -295,25 +310,27 @@ impl Search {
                 best_move = Some(mov);
 
                 if eval > alpha {
-                    self.pv_table[ply as usize][0] = best_move;
+                    if !IS_NULL {
+                        self.pv_table[ply as usize][0] = best_move;
 
-                    let (left, right) = self.pv_table.split_at_mut(ply as usize + 1);
+                        let (left, right) = self.pv_table.split_at_mut(ply as usize + 1);
 
-                    if let (Some(dest_row), Some(src_row)) = (left.last_mut(), right.first()) {
-                        let dest = &mut dest_row[1..(self.pv_lengths[ply as usize + 1] + 1)];
-                        let src = &src_row[0..self.pv_lengths[ply as usize + 1]];
-                        dest.copy_from_slice(src);
+                        if let (Some(dest_row), Some(src_row)) = (left.last_mut(), right.first()) {
+                            let dest = &mut dest_row[1..(self.pv_lengths[ply as usize + 1] + 1)];
+                            let src = &src_row[0..self.pv_lengths[ply as usize + 1]];
+                            dest.copy_from_slice(src);
+                        }
+
+                        self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
                     }
 
-                    self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
-
-                    evaluation_bound = NodeType::Exact;
+                    evaluation_bound = Bound::Exact;
                     alpha = eval;
                 }
             }
 
             if eval >= beta {
-                evaluation_bound = NodeType::LowerBound;
+                evaluation_bound = Bound::Lower;
                 if !board.is_capture(mov) {
                     self.update_killer_moves(mov, ply);
                 }
@@ -457,7 +474,8 @@ impl Search {
     fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
         if let Some(pv_mov) = self.pv_table[ply as usize][0] {
             if mov == pv_mov {
-                return MAX_EVAL;
+                const PV_SCORE: i32 = 100000;
+                return PV_SCORE;
             }
         }
         //if let Some(pv_mov) = self.result.pv.get(ply as usize) {
@@ -472,14 +490,17 @@ impl Search {
             let captured_piece = board.squares[mov.to()].unwrap();
             let moving_piece = board.squares[mov.from()].unwrap();
             let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
+            const CAPTURE_BASE_SCORE: i32 = 1000;
             score += CAPTURE_BASE_SCORE + capture_score;
         } else {
             if self.is_killer_move(mov, ply) {
+                const KILLER_MOVE_SCORE: i32 = 800;
                 score += KILLER_MOVE_SCORE;
             }
         }
         if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
             if entry.best_move == mov {
+                const HASH_MOVE_SCORE: i32 = 4000;
                 score += HASH_MOVE_SCORE;
             }
         }

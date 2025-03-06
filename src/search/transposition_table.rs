@@ -49,25 +49,19 @@ pub struct TranspositionEntry {
     pub depth: u32,
     pub eval: i32,
     pub best_move: Move,
-    pub node_type: NodeType,
+    pub node_type: Bound,
     pub hash: u64,
 }
 
 impl TranspositionEntry {
-    pub fn new(depth: u32, eval: i32, best_move: Move, node_type: NodeType, hash: u64) -> Self {
-        Self {
-            depth,
-            eval,
-            best_move,
-            node_type,
-            hash,
-        }
+    pub fn new(depth: u32, eval: i32, best_move: Move, node_type: Bound, hash: u64) -> Self {
+        Self { depth, eval, best_move, node_type, hash }
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum NodeType {
+pub enum Bound {
     Exact,
-    LowerBound,
-    UpperBound,
+    Lower,
+    Upper,
 }
