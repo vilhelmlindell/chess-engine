@@ -9,7 +9,7 @@ use crate::evaluation::evaluate;
 use crate::move_generation::generate_moves;
 use crate::search::book_moves::get_book_move;
 use crate::search::transposition_table::{Bound, TranspositionEntry};
-use core::simd;
+use core::{hash, simd};
 use std::char::MAX;
 use std::cmp::Ordering;
 use std::i32::{self};
@@ -26,7 +26,7 @@ pub const KILLER_MOVE_SLOTS: usize = 3;
 const MAX_EVAL: i32 = 1000000;
 
 const USE_TT: bool = true;
-const USE_SYZYGY: bool = false;
+const USE_SYZYGY: bool = true;
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -106,76 +106,48 @@ impl Search {
             SearchMode::MoveTime => search_params.move_time,
             SearchMode::Clock => self.calculate_time(board),
         };
-
         for depth in 1..=MAX_DEPTH as u32 {
-            //let eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
             let mut eval;
 
-            //// Aspiration windows for deeper searches
-            if depth >= 3 {
-                // Start with previous eval as center of window
-                let prev_eval = self.result.highest_eval;
+            if depth < 4 {
+                eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+            } else {
+                const WINDOW_SIZE: i32 = 33;
 
-                // Use dynamic window size based on depth
-                // Deeper searches use wider initial windows
-                let window_size = 20 + depth as i32 * 5;
+                // Aspiration windows for deeper searches
+                let mut alpha = self.result.highest_eval - WINDOW_SIZE;
+                let mut beta = self.result.highest_eval + WINDOW_SIZE;
+                let mut window_size = WINDOW_SIZE;
 
-                let mut alpha = prev_eval - window_size;
-                let mut beta = prev_eval + window_size;
-
-                // Fail count to track number of window adjustments
-                let mut fail_count = 0;
-
+                // Iterative deepening with gradually expanding windows
                 loop {
                     eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, alpha, beta, 0);
 
-                    if self.should_quit(depth) {
+                    // Handle window failures
+                    if eval <= alpha {
+                        // Lower bound failure - expand window downward
+                        window_size = window_size * 2;
+                        alpha = i32::max(eval - window_size, -MAX_EVAL);
+                        // Optionally add a deeper verification on window failures
+                        // self.tt.prefetch(board.hash());
+                    } else if eval >= beta {
+                        // Upper bound failure - expand window upward
+                        window_size = window_size * 2;
+                        beta = i32::min(eval + window_size, MAX_EVAL);
+                        // Optionally add a deeper verification on window failures
+                        // self.tt.prefetch(board.hash());
+                    } else {
+                        // Search successful within window
                         break;
                     }
 
-                    // Check if we failed low (eval <= alpha)
-                    if eval <= alpha {
-                        fail_count += 1;
-
-                        // Widen window progressively
-                        // Small widening for first fail, then more aggressive
-                        if fail_count == 1 {
-                            alpha -= window_size * 2;
-                        } else if fail_count == 2 {
-                            alpha -= window_size * 4;
-                        } else {
-                            // After multiple fails, go to full window
-                            alpha = -MAX_EVAL;
-                        }
-
-                        // Keep beta unchanged on fail low
-                        continue;
+                    // Safety check for too many window re-searches
+                    if window_size >= MAX_EVAL / 2 {
+                        // If windows are getting too large, do a full-width search
+                        eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+                        break;
                     }
-
-                    // Check if we failed high (eval >= beta)
-                    if eval >= beta {
-                        fail_count += 1;
-
-                        // Similar progressive widening for beta
-                        if fail_count == 1 {
-                            beta += window_size * 2;
-                        } else if fail_count == 2 {
-                            beta += window_size * 4;
-                        } else {
-                            // After multiple fails, go to full window
-                            beta = MAX_EVAL;
-                        }
-
-                        // Keep alpha unchanged on fail high
-                        continue;
-                    }
-
-                    // If we get here, search succeeded within the window
-                    break;
                 }
-            } else {
-                // Full window search for shallow depths
-                eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
             }
 
             if self.should_quit(depth) {
@@ -186,8 +158,6 @@ impl Search {
             self.result.depth_reached = depth;
             self.result.pv = self.extract_pv();
             self.result.time = self.start_time.elapsed();
-            //println!("transpositions: {}, entries: {}, filled: {}%", self.result.transpositions, board.transposition_table.filled_count(), board.transposition_table.filled_percentage());
-
             Search::print_info(&self.result);
         }
 
@@ -498,11 +468,14 @@ impl Search {
     }
 
     fn get_move_score(&self, mov: Move, board: &Board, ply: u32, hash_move: Option<Move>) -> i32 {
-        if let Some(pv_mov) = self.pv_table[ply as usize][0] {
-            if mov == pv_mov {
-                const PV_SCORE: i32 = 100000;
-                return PV_SCORE;
-            }
+        if Some(mov) == self.result.pv.get(ply as usize).cloned() {
+            const PV_SCORE: i32 = 100000;
+            return PV_SCORE;
+        }
+
+        if Some(mov) == hash_move {
+            const HASH_MOVE_SCORE: i32 = 800000;
+            return HASH_MOVE_SCORE;
         }
 
         let mut score = 0;
@@ -523,6 +496,41 @@ impl Search {
 
         score
     }
+    //fn get_move_score(&self, mov: Move, board: &Board, ply: u32, hash_move: Option<Move>) -> i32 {
+    //    const HASH_MOVE_SCORE: i32 = 4000;
+    //    const CAPTURE_BASE_SCORE: i32 = 1000;
+    //    const KILLER_MOVE_SCORE: i32 = 800;
+
+    //    if let Some(pv_mov) = self.result.pv.get(ply as usize) {
+    //        if mov == *pv_mov {
+    //            return MAX_EVAL;
+    //        }
+    //    }
+
+    //    let mut score = 0;
+
+    //    if board.is_capture(mov) {
+    //        let captured_piece = board.squares[mov.to()].unwrap();
+    //        let moving_piece = board.squares[mov.from()].unwrap();
+    //        let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
+    //        score += CAPTURE_BASE_SCORE + capture_score;
+    //    } else {
+    //        for killer_move in &self.killer_moves[ply as usize] {
+    //            if let Some(killer) = killer_move {
+    //                if mov == *killer {
+    //                    score += KILLER_MOVE_SCORE;
+    //                    break;
+    //                }
+    //            }
+    //        }
+    //    }
+    //    if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+    //        if entry.best_move == mov {
+    //            score += HASH_MOVE_SCORE;
+    //        }
+    //    }
+    //    score
+    //}
 
     fn update_killer_moves(&mut self, mov: Move, ply: u32) {
         let ply = ply as usize;
