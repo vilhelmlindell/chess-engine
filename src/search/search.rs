@@ -25,6 +25,8 @@ pub const KILLER_MOVE_SLOTS: usize = 3;
 
 const MAX_EVAL: i32 = 1000000;
 
+const USE_TT: bool = true;
+
 #[repr(u8)]
 #[derive(Clone, Copy)]
 pub enum NodeType {
@@ -54,7 +56,7 @@ impl Search {
         self.result = SearchResult::default();
         self.pv_table = [[None; MAX_DEPTH]; MAX_DEPTH];
         self.pv_lengths = [0; MAX_DEPTH];
-        //board.transposition_table.clear();
+        board.transposition_table.clear();
 
         if search_params.use_book {
             if let Some(book_move) = get_book_move(board, 1.0) {
@@ -68,35 +70,35 @@ impl Search {
         self.start_time = Instant::now();
         self.root_ply = board.ply;
 
-        if board.occupied_squares.count_ones() <= 5 {
-            //println!("syzygy: {}", board.fen());
-            let result = self.probe_syzygy_root(board);
-            match result.root {
-                pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
-                pyrrhic_rs::DtzProbeValue::Checkmate => return self.result.clone(),
-                pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
-                pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
-                    let move_type = match dtz_result.promotion {
-                        pyrrhic_rs::Piece::Knight => MoveType::KnightPromotion,
-                        pyrrhic_rs::Piece::Bishop => MoveType::BishopPromotion,
-                        pyrrhic_rs::Piece::Rook => MoveType::RookPromotion,
-                        pyrrhic_rs::Piece::Queen => MoveType::QueenPromotion,
-                        _ => {
-                            if dtz_result.ep {
-                                MoveType::EnPassant
-                            } else {
-                                MoveType::Normal
-                            }
-                        }
-                    };
-                    let mov = Move::new(flip_rank(dtz_result.from_square as usize), flip_rank(dtz_result.to_square as usize), move_type);
-                    self.result.pv.clear();
-                    self.result.pv.push(mov);
-                    Search::print_info(&self.result);
-                    return self.result.clone();
-                }
-            }
-        }
+        //if board.occupied_squares.count_ones() <= 5 {
+        //    //println!("syzygy: {}", board.fen());
+        //    let result = self.probe_syzygy_root(board);
+        //    match result.root {
+        //        pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
+        //        pyrrhic_rs::DtzProbeValue::Checkmate => return self.result.clone(),
+        //        pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
+        //        pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
+        //            let move_type = match dtz_result.promotion {
+        //                pyrrhic_rs::Piece::Knight => MoveType::KnightPromotion,
+        //                pyrrhic_rs::Piece::Bishop => MoveType::BishopPromotion,
+        //                pyrrhic_rs::Piece::Rook => MoveType::RookPromotion,
+        //                pyrrhic_rs::Piece::Queen => MoveType::QueenPromotion,
+        //                _ => {
+        //                    if dtz_result.ep {
+        //                        MoveType::EnPassant
+        //                    } else {
+        //                        MoveType::Normal
+        //                    }
+        //                }
+        //            };
+        //            let mov = Move::new(flip_rank(dtz_result.from_square as usize), flip_rank(dtz_result.to_square as usize), move_type);
+        //            self.result.pv.clear();
+        //            self.result.pv.push(mov);
+        //            Search::print_info(&self.result);
+        //            return self.result.clone();
+        //        }
+        //    }
+        //}
 
         self.max_time = match search_params.search_mode {
             SearchMode::Infinite => u128::max_value(),
@@ -108,7 +110,7 @@ impl Search {
             //let eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
             let mut eval;
 
-            // Aspiration windows for deeper searches
+            //// Aspiration windows for deeper searches
             if depth >= 3 {
                 // Start with previous eval as center of window
                 let prev_eval = self.result.highest_eval;
@@ -183,6 +185,7 @@ impl Search {
             self.result.depth_reached = depth;
             self.result.pv = self.extract_pv();
             self.result.time = self.start_time.elapsed();
+            //println!("transpositions: {}, entries: {}, filled: {}%", self.result.transpositions, board.transposition_table.filled_count(), board.transposition_table.filled_percentage());
 
             Search::print_info(&self.result);
         }
@@ -219,48 +222,53 @@ impl Search {
 
         self.result.nodes += 1;
 
-        if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-            if entry.hash == board.zobrist_hash && entry.depth >= depth && !is_root {
-                self.result.transpositions += 1;
+        let mut hash_move = None;
 
-                match entry.node_type {
-                    Bound::Exact => return entry.eval,
-                    Bound::Lower => alpha = alpha.max(entry.eval),
-                    Bound::Upper => beta = beta.min(entry.eval),
-                }
+        if USE_TT {
+            if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+                if entry.hash == board.zobrist_hash && entry.depth >= depth && !is_root {
+                    hash_move = Some(entry.best_move);
+                    self.result.transpositions += 1;
 
-                if alpha >= beta {
-                    return entry.eval;
+                    match entry.node_type {
+                        Bound::Exact => return entry.eval,
+                        Bound::Lower => alpha = alpha.max(entry.eval),
+                        Bound::Upper => beta = beta.min(entry.eval),
+                    }
+
+                    if alpha >= beta {
+                        return entry.eval;
+                    }
                 }
             }
         }
 
         //let hash_move = tt_hit.map(|entry| entry.best_move);
 
-        if board.occupied_squares.count_ones() <= 5 {
-            let result = self.probe_syzygy_root(board);
-            match result.root {
-                pyrrhic_rs::DtzProbeValue::Stalemate => return 0,
-                pyrrhic_rs::DtzProbeValue::Checkmate => {
-                    let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
-                    if board.attacked(king_square) {
-                        return -MAX_EVAL + ply as i32;
-                    } else {
-                        return MAX_EVAL - ply as i32;
-                    };
-                }
-                pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
-                pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
-                    return match dtz_result.wdl {
-                        pyrrhic_rs::WdlProbeResult::Loss => -MAX_EVAL + ply as i32,
-                        pyrrhic_rs::WdlProbeResult::BlessedLoss => -MAX_EVAL + 10000 + ply as i32,
-                        pyrrhic_rs::WdlProbeResult::Draw => 0,
-                        pyrrhic_rs::WdlProbeResult::CursedWin => MAX_EVAL - 10000 - ply as i32,
-                        pyrrhic_rs::WdlProbeResult::Win => MAX_EVAL - ply as i32,
-                    };
-                }
-            }
-        }
+        //if board.occupied_squares.count_ones() <= 5 {
+        //    let result = self.probe_syzygy_root(board);
+        //    match result.root {
+        //        pyrrhic_rs::DtzProbeValue::Stalemate => return 0,
+        //        pyrrhic_rs::DtzProbeValue::Checkmate => {
+        //            let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
+        //            if board.attacked(king_square) {
+        //                return -MAX_EVAL + ply as i32;
+        //            } else {
+        //                return MAX_EVAL - ply as i32;
+        //            };
+        //        }
+        //        pyrrhic_rs::DtzProbeValue::Failed => eprintln!("Dtz probe failed at root"),
+        //        pyrrhic_rs::DtzProbeValue::DtzResult(dtz_result) => {
+        //            return match dtz_result.wdl {
+        //                pyrrhic_rs::WdlProbeResult::Loss => -MAX_EVAL + ply as i32,
+        //                pyrrhic_rs::WdlProbeResult::BlessedLoss => -MAX_EVAL + 10000 + ply as i32,
+        //                pyrrhic_rs::WdlProbeResult::Draw => 0,
+        //                pyrrhic_rs::WdlProbeResult::CursedWin => MAX_EVAL - 10000 - ply as i32,
+        //                pyrrhic_rs::WdlProbeResult::Win => MAX_EVAL - ply as i32,
+        //            };
+        //        }
+        //    }
+        //}
 
         //let static_eval = evaluate(board);
         //let improving = ply >= 2 && static_eval > self.previous_static_eval;
@@ -293,7 +301,7 @@ impl Search {
             };
         }
 
-        self.order_moves::<false>(board, &mut moves, ply);
+        self.order_moves(board, &mut moves, ply, hash_move);
 
         let mut best_move = None;
         let mut best_eval = -MAX_EVAL + ply as i32;
@@ -309,6 +317,7 @@ impl Search {
 
             board.make_move(mov);
 
+            //let mut eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
             let mut eval;
             let full_depth_search = board.in_check() || self.is_killer_move(mov, ply);
 
@@ -348,6 +357,9 @@ impl Search {
                 best_move = Some(mov);
 
                 if eval > alpha {
+                    //if (is_root) {
+                    //    self.result.best_move = Some(mov);
+                    //}
                     if !IS_NULL {
                         self.pv_table[ply as usize][0] = best_move;
 
@@ -412,7 +424,7 @@ impl Search {
             return stand_pat;
         }
 
-        self.order_moves::<true>(board, &mut moves, ply);
+        self.order_moves(board, &mut moves, ply, None);
 
         for mov in moves {
             board.make_move(mov);
@@ -480,43 +492,34 @@ impl Search {
         pv
     }
 
-    pub fn order_moves<const ONLY_CAPTURES: bool>(&self, board: &Board, moves: &mut [Move], ply: u32) {
-        moves.sort_by_cached_key(|mov| -self.get_move_score::<ONLY_CAPTURES>(*mov, board, ply));
+    pub fn order_moves(&self, board: &Board, moves: &mut [Move], ply: u32, hash_move: Option<Move>) {
+        moves.sort_by_cached_key(|mov| -self.get_move_score(*mov, board, ply, hash_move));
     }
 
-    fn get_move_score<const ONLY_CAPTURES: bool>(&self, mov: Move, board: &Board, ply: u32) -> i32 {
+    fn get_move_score(&self, mov: Move, board: &Board, ply: u32, hash_move: Option<Move>) -> i32 {
         if let Some(pv_mov) = self.pv_table[ply as usize][0] {
             if mov == pv_mov {
                 const PV_SCORE: i32 = 100000;
                 return PV_SCORE;
             }
         }
-        //if let Some(pv_mov) = self.result.pv.get(ply as usize) {
-        //    if mov == *pv_mov {
-        //        return MAX_EVAL;
-        //    }
-        //}
 
         let mut score = 0;
 
-        if ONLY_CAPTURES || board.is_capture(mov) {
+        if board.is_capture(mov) {
             let captured_piece = board.squares[mov.to()].unwrap();
             let moving_piece = board.squares[mov.from()].unwrap();
             let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
             const CAPTURE_BASE_SCORE: i32 = 1000;
             score += CAPTURE_BASE_SCORE + capture_score;
-        } else {
-            if self.is_killer_move(mov, ply) {
-                const KILLER_MOVE_SCORE: i32 = 800;
-                score += KILLER_MOVE_SCORE;
-            }
+        } else if let Some(piece) = mov.move_type().promotion_piece() {
+            const PROMOTION_BASE_SCORE: i32 = 1000;
+            score += PROMOTION_BASE_SCORE + piece.centipawns() - PieceType::Pawn.centipawns();
+        } else if self.is_killer_move(mov, ply) {
+            const KILLER_MOVE_SCORE: i32 = 800;
+            score += KILLER_MOVE_SCORE;
         }
-        if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-            if entry.best_move == mov {
-                const HASH_MOVE_SCORE: i32 = 4000;
-                score += HASH_MOVE_SCORE;
-            }
-        }
+
         score
     }
 
@@ -603,7 +606,7 @@ impl Default for Search {
 
 #[derive(Default, Clone)]
 pub struct SearchResult {
-    //pub best_move: Option<Move>,
+    pub best_move: Option<Move>,
     pub pv: Vec<Move>,
     pub highest_eval: i32,
     pub depth_reached: u32,

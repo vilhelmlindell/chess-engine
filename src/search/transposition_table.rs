@@ -10,7 +10,13 @@ pub struct TranspositionTable {
 impl TranspositionTable {
     pub fn store(&mut self, entry: TranspositionEntry) {
         let index = self.get_index(entry.hash);
-        self.table[index] = Some(entry);
+        if let Some(existing) = self.table[index] {
+            if entry.depth > existing.depth {
+                self.table[index] = Some(entry);
+            }
+        } else {
+            self.table[index] = Some(entry);
+        }
     }
 
     pub fn probe(&self, hash: u64) -> Option<TranspositionEntry> {

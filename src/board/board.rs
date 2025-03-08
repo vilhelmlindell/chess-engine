@@ -300,7 +300,7 @@ impl Board {
                 state.captured_piece = Some(captured_piece);
             }
             MoveType::RookPromotion | MoveType::QueenPromotion | MoveType::BishopPromotion | MoveType::KnightPromotion => {
-                let piece_type = mov.move_type().promotion_piece();
+                let piece_type = mov.move_type().promotion_piece().unwrap();
                 let piece = Piece::new(piece_type, self.side);
                 self.clear_square(mov.to());
                 self.set_square(mov.to(), piece);

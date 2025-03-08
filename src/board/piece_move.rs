@@ -22,13 +22,13 @@ pub enum MoveType {
 impl MoveType {
     pub const PROMOTIONS: [MoveType; 4] = [MoveType::BishopPromotion, MoveType::RookPromotion, MoveType::QueenPromotion, MoveType::KnightPromotion];
 
-    pub fn promotion_piece(&self) -> PieceType {
+    pub fn promotion_piece(&self) -> Option<PieceType> {
         match self {
-            MoveType::KnightPromotion => PieceType::Knight,
-            MoveType::BishopPromotion => PieceType::Bishop,
-            MoveType::QueenPromotion => PieceType::Queen,
-            MoveType::RookPromotion => PieceType::Rook,
-            _ => panic!("Enum variant is not a promotion"),
+            MoveType::KnightPromotion => Some(PieceType::Knight),
+            MoveType::BishopPromotion => Some(PieceType::Bishop),
+            MoveType::QueenPromotion => Some(PieceType::Queen),
+            MoveType::RookPromotion => Some(PieceType::Rook),
+            _ => None,
         }
     }
 }
@@ -102,7 +102,7 @@ impl Display for Move {
         let end_rank = (8 - self.to() / 8).to_string();
         write!(f, "{}{}{}{}", start_file, start_rank, end_file, end_rank).unwrap();
         if MoveType::PROMOTIONS.contains(&self.move_type()) {
-            let piece_type = self.move_type().promotion_piece();
+            let piece_type = self.move_type().promotion_piece().unwrap();
             write!(f, "{}", piece_chars.get(&piece_type).unwrap()).unwrap();
         }
         Ok(())
