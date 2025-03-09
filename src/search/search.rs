@@ -26,6 +26,7 @@ pub const KILLER_MOVE_SLOTS: usize = 3;
 const MAX_EVAL: i32 = 1000000;
 
 const USE_TT: bool = true;
+const USE_LMR: bool = true;
 const USE_SYZYGY: bool = true;
 
 #[repr(u8)]
@@ -286,27 +287,36 @@ impl Search {
             //    continue;
             //}
 
+            let mut full_depth_search = board.in_check() || self.is_killer_move(mov, ply);
+
             board.make_move(mov);
+
+            full_depth_search = full_depth_search || board.in_check();
 
             //let mut eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
             let mut eval;
-            let full_depth_search = board.in_check() || self.is_killer_move(mov, ply);
 
             if i == 0 {
                 eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
-            //} else if i >= 3 && depth >= 3 && !full_depth_search {
-            //    let r = 1;
-            //    let reduced_depth = (depth - 1 - r).max(1);
+            } else if USE_LMR && i >= 2 && depth >= 3 && !full_depth_search {
+                //let reduction = (if board.is_capture(mov) || mov.is_promotion() {
+                //    0.20 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 3.35
+                //} else {
+                //    1.35 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 2.75
+                //} as u32);
+                let reduction = 1;
 
-            //    eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
+                let reduced_depth = (depth - 1 - reduction).max(1);
 
-            //    if eval > alpha {
-            //        eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+                eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
 
-            //        if on_pv && eval > alpha && eval < beta {
-            //            eval = -self.pvs::<{ NodeType::PV as u8 }, true>(board, depth - 1, -beta, -alpha, ply + 1);
-            //        }
-            //    }
+                if eval > alpha {
+                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+
+                    if on_pv && eval > alpha && eval < beta {
+                        eval = -self.pvs::<{ NodeType::PV as u8 }, true>(board, depth - 1, -beta, -alpha, ply + 1);
+                    }
+                }
             } else {
                 // Non-PV nodes - scout with null window first
                 eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
