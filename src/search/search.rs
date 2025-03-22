@@ -322,7 +322,7 @@ impl Search {
                 //    1.35 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 2.75
                 //} as u32);
                 //let reduction = 1;
-                // Improved LMR formula with better tuned parameters
+                //// Improved LMR formula with better tuned parameters
                 let is_tactical = board.is_capture(mov) || mov.is_promotion();
 
                 // Base reduction calculation
