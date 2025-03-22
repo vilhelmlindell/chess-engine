@@ -28,6 +28,12 @@ const MAX_EVAL: i32 = 1000000;
 const USE_TT: bool = true;
 const USE_LMR: bool = true;
 const USE_SYZYGY: bool = true;
+const USE_QUIESCENCE: bool = true;
+const USE_NULL_MOVE: bool = true;
+const USE_MOVE_ORDERING: bool = true;
+const USE_PVS: bool = true;
+const USE_ALPHA_BETA: bool = true;
+const USE_ASPIRATION: bool = true;
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -110,7 +116,7 @@ impl Search {
         for depth in 1..=MAX_DEPTH as u32 {
             let mut eval;
 
-            if depth < 4 {
+            if !USE_ASPIRATION || depth < 4 {
                 eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
             } else {
                 const WINDOW_SIZE: i32 = 33;
@@ -183,7 +189,11 @@ impl Search {
         }
 
         if depth == 0 {
-            return self.quiescence_search(board, alpha, beta, ply);
+            if USE_QUIESCENCE {
+                return self.quiescence_search(board, alpha, beta, ply);
+            } else {
+                return evaluate(board);
+            }
         }
 
         alpha = alpha.max(-MAX_EVAL + ply as i32);
@@ -246,14 +256,16 @@ impl Search {
         //let improving = ply >= 2 && static_eval > self.previous_static_eval;
         //self.previous_static_eval = static_eval;
 
-        let reduction = 2;
-        if !IS_NULL && !board.in_check() && depth > reduction + 1 {
-            board.make_null_move();
-            let null_move_eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1 - reduction, -beta, -beta + 1, ply + 1);
-            board.unmake_null_move();
+        if USE_NULL_MOVE {
+            let reduction = 2;
+            if !IS_NULL && !board.in_check() && depth > reduction + 1 {
+                board.make_null_move();
+                let null_move_eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1 - reduction, -beta, -beta + 1, ply + 1);
+                board.unmake_null_move();
 
-            if null_move_eval >= beta {
-                return null_move_eval; // Beta cutoff, prune this node
+                if null_move_eval >= beta {
+                    return null_move_eval; // Beta cutoff, prune this node
+                }
             }
         }
 
@@ -273,12 +285,13 @@ impl Search {
             };
         }
 
-        self.order_moves(board, &mut moves, ply, hash_move);
+        if USE_MOVE_ORDERING {
+            self.order_moves(board, &mut moves, ply, hash_move);
+        }
 
         let mut best_move = None;
         let mut best_eval = -MAX_EVAL + ply as i32;
         let mut evaluation_bound = Bound::Upper;
-        let mut extensions = 0;
 
         // Principal Variation Search
         for (i, &mov) in moves.iter().enumerate() {
@@ -287,43 +300,58 @@ impl Search {
             //    continue;
             //}
 
-            let mut full_depth_search = board.in_check() || self.is_killer_move(mov, ply);
-
             board.make_move(mov);
 
-            full_depth_search = full_depth_search || board.in_check();
+            let mut extensions = 0;
+
+            let do_lmr = board.in_check() || self.is_killer_move(mov, ply) || board.is_capture(mov);
+
+            if board.in_check() {
+                extensions += 1;
+            }
 
             //let mut eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
             let mut eval;
 
-            if i == 0 {
-                eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
-            } else if USE_LMR && i >= 2 && depth >= 3 && !full_depth_search {
+            if i == 0 || !USE_PVS {
+                eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
+            } else if USE_LMR && i >= 4 && depth >= 3 && !do_lmr {
                 //let reduction = (if board.is_capture(mov) || mov.is_promotion() {
                 //    0.20 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 3.35
                 //} else {
                 //    1.35 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 2.75
                 //} as u32);
-                let reduction = 1;
+                //let reduction = 1;
+                // Improved LMR formula with better tuned parameters
+                let is_tactical = board.is_capture(mov) || mov.is_promotion();
 
+                // Base reduction calculation
+                let base = if is_tactical { 0.5 } else { 1.0 };
+
+                // Calculate dynamic reduction based on depth and move index
+                // Lower divisor for tactical moves to reduce less
+                let divisor = if is_tactical { 3.5 } else { 2.25 };
+                let reduction = (base + (depth as f64).ln() * (i as f64).ln() / divisor).max(1.0) as u32;
+
+                // Ensure we don't reduce too much
                 let reduced_depth = (depth - 1 - reduction).max(1);
 
                 eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
 
                 if eval > alpha {
-                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1 + extensions, -(alpha + 1), -alpha, ply + 1);
 
                     if on_pv && eval > alpha && eval < beta {
-                        eval = -self.pvs::<{ NodeType::PV as u8 }, true>(board, depth - 1, -beta, -alpha, ply + 1);
+                        eval = -self.pvs::<{ NodeType::PV as u8 }, true>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
                     }
                 }
             } else {
                 // Non-PV nodes - scout with null window first
-                eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, depth - 1, -(alpha + 1), -alpha, ply + 1);
+                eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, depth - 1 + extensions, -(alpha + 1), -alpha, ply + 1);
 
                 // Re-search with full window if the move looks promising
                 if on_pv && eval > alpha && eval < beta {
-                    eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
+                    eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
                 }
             }
 
@@ -337,7 +365,7 @@ impl Search {
                 best_eval = eval;
                 best_move = Some(mov);
 
-                if eval > alpha {
+                if !USE_ALPHA_BETA || eval > alpha {
                     //if (is_root) {
                     //    self.result.best_move = Some(mov);
                     //}
@@ -354,12 +382,14 @@ impl Search {
                         self.pv_lengths[ply as usize] = self.pv_lengths[ply as usize + 1] + 1;
                     }
 
-                    evaluation_bound = Bound::Exact;
-                    alpha = eval;
+                    if USE_ALPHA_BETA {
+                        evaluation_bound = Bound::Exact;
+                        alpha = eval;
+                    }
                 }
             }
 
-            if eval >= beta {
+            if USE_ALPHA_BETA && eval >= beta {
                 evaluation_bound = Bound::Lower;
                 if !board.is_capture(mov) {
                     self.update_killer_moves(mov, ply);
