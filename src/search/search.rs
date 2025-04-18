@@ -20,20 +20,79 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use super::move_ordering::order_moves;
+
 pub const MAX_DEPTH: usize = 100;
 pub const KILLER_MOVE_SLOTS: usize = 3;
 
 const MAX_EVAL: i32 = 1000000;
 
-const USE_TT: bool = true;
-const USE_LMR: bool = true;
-const USE_SYZYGY: bool = true;
-const USE_QUIESCENCE: bool = true;
-const USE_NULL_MOVE: bool = true;
-const USE_MOVE_ORDERING: bool = true;
-const USE_PVS: bool = true;
-const USE_ALPHA_BETA: bool = true;
-const USE_ASPIRATION: bool = true;
+// Transposition Table
+#[cfg(feature = "tt")]
+pub const USE_TT: bool = true;
+#[cfg(not(feature = "tt"))]
+pub const USE_TT: bool = false;
+
+// Late Move Reduction
+#[cfg(feature = "lmr")]
+pub const USE_LMR: bool = true;
+#[cfg(not(feature = "lmr"))]
+pub const USE_LMR: bool = false;
+
+// Syzygy endgame tablebases
+#[cfg(feature = "syzygy")]
+pub const USE_SYZYGY: bool = true;
+#[cfg(not(feature = "syzygy"))]
+pub const USE_SYZYGY: bool = false;
+
+// Quiescence search
+#[cfg(feature = "quiescence")]
+pub const USE_QUIESCENCE: bool = true;
+#[cfg(not(feature = "quiescence"))]
+pub const USE_QUIESCENCE: bool = false;
+
+// Null Move pruning
+#[cfg(feature = "null-move")]
+pub const USE_NULL_MOVE: bool = true;
+#[cfg(not(feature = "null-move"))]
+pub const USE_NULL_MOVE: bool = false;
+
+// Move ordering
+#[cfg(feature = "move-ordering")]
+pub const USE_MOVE_ORDERING: bool = true;
+#[cfg(not(feature = "move-ordering"))]
+pub const USE_MOVE_ORDERING: bool = false;
+
+// Principal Variation Search
+#[cfg(feature = "pvs")]
+pub const USE_PVS: bool = true;
+#[cfg(not(feature = "pvs"))]
+pub const USE_PVS: bool = false;
+
+// Alpha-Beta pruning
+#[cfg(feature = "alpha-beta")]
+pub const USE_ALPHA_BETA: bool = true;
+#[cfg(not(feature = "alpha-beta"))]
+pub const USE_ALPHA_BETA: bool = false;
+
+// Aspiration windows
+#[cfg(feature = "aspiration")]
+pub const USE_ASPIRATION: bool = true;
+#[cfg(not(feature = "aspiration"))]
+pub const USE_ASPIRATION: bool = false;
+
+// Futility pruning
+#[cfg(feature = "futility")]
+pub const USE_FUTILITY: bool = true;
+#[cfg(not(feature = "futility"))]
+pub const USE_FUTILITY: bool = false;
+
+// Iterative deepening
+//#[cfg(feature = "iterative-deepening")]
+//pub const USE_ITERATIVE_DEEPENING: bool = true;
+//#[cfg(not(feature = "iterative-deepening"))]
+//pub const USE_ITERATIVE_DEEPENING: bool = false;
+pub const USE_ITERATIVE_DEEPENING: bool = true;
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -56,6 +115,7 @@ pub struct Search {
     pub syzygy: pyrrhic_rs::TableBases<Board>,
     pub start_time: Instant,
     pub previous_static_eval: i32,
+    pub history: [[[u32; 64]; 64]; 2],
 }
 
 impl Search {
@@ -79,7 +139,6 @@ impl Search {
         self.root_ply = board.ply;
 
         if USE_SYZYGY && board.occupied_squares.count_ones() <= 5 {
-            //println!("syzygy: {}", board.fen());
             let result = self.probe_syzygy_root(board);
             match result.root {
                 pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
@@ -113,56 +172,67 @@ impl Search {
             SearchMode::MoveTime => search_params.move_time,
             SearchMode::Clock => self.calculate_time(board),
         };
-        for depth in 1..=MAX_DEPTH as u32 {
-            let mut eval;
+        //self.max_time = 3000;
 
-            if !USE_ASPIRATION || depth < 4 {
-                eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
-            } else {
-                const WINDOW_SIZE: i32 = 33;
+        // Modify search logic based on USE_ITERATIVE_DEEPENING constant
+        if USE_ITERATIVE_DEEPENING {
+            for depth in 1..=MAX_DEPTH as u32 {
+                let mut eval;
 
-                // Aspiration windows for deeper searches
-                let mut alpha = self.result.highest_eval - WINDOW_SIZE;
-                let mut beta = self.result.highest_eval + WINDOW_SIZE;
-                let mut window_size = WINDOW_SIZE;
+                if !USE_ASPIRATION || depth < 4 {
+                    eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+                } else {
+                    const WINDOW_SIZE: i32 = 33;
 
-                // Iterative deepening with gradually expanding windows
-                loop {
-                    eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, alpha, beta, 0);
+                    // Aspiration windows for deeper searches
+                    let mut alpha = self.result.highest_eval - WINDOW_SIZE;
+                    let mut beta = self.result.highest_eval + WINDOW_SIZE;
+                    let mut window_size = WINDOW_SIZE;
 
-                    // Handle window failures
-                    if eval <= alpha {
-                        // Lower bound failure - expand window downward
-                        window_size = window_size * 2;
-                        alpha = i32::max(eval - window_size, -MAX_EVAL);
-                        // Optionally add a deeper verification on window failures
-                        // self.tt.prefetch(board.hash());
-                    } else if eval >= beta {
-                        // Upper bound failure - expand window upward
-                        window_size = window_size * 2;
-                        beta = i32::min(eval + window_size, MAX_EVAL);
-                        // Optionally add a deeper verification on window failures
-                        // self.tt.prefetch(board.hash());
-                    } else {
-                        // Search successful within window
-                        break;
-                    }
+                    // Iterative deepening with gradually expanding windows
+                    loop {
+                        eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, alpha, beta, 0);
 
-                    // Safety check for too many window re-searches
-                    if window_size >= MAX_EVAL / 2 {
-                        // If windows are getting too large, do a full-width search
-                        eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
-                        break;
+                        // Handle window failures
+                        if eval <= alpha {
+                            // Lower bound failure - expand window downward
+                            window_size = window_size * 2;
+                            alpha = i32::max(eval - window_size, -MAX_EVAL);
+                        } else if eval >= beta {
+                            // Upper bound failure - expand window upward
+                            window_size = window_size * 2;
+                            beta = i32::min(eval + window_size, MAX_EVAL);
+                        } else {
+                            // Search successful within window
+                            break;
+                        }
+
+                        // Safety check for too many window re-searches
+                        if window_size >= MAX_EVAL / 2 {
+                            // If windows are getting too large, do a full-width search
+                            eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+                            break;
+                        }
                     }
                 }
-            }
 
-            if self.should_quit(depth) {
-                break;
+                if self.should_quit(depth) {
+                    break;
+                }
+
+                self.result.highest_eval = eval;
+                self.result.depth_reached = depth;
+                self.result.pv = self.extract_pv();
+                self.result.time = self.start_time.elapsed();
+                Search::print_info(&self.result);
             }
+        } else {
+            unimplemented!("iterative deepening needs to be enabled");
+            // Non-iterative deepening: search to the maximum depth directly
+            let eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, MAX_DEPTH as u32, -MAX_EVAL, MAX_EVAL, 0);
 
             self.result.highest_eval = eval;
-            self.result.depth_reached = depth;
+            self.result.depth_reached = MAX_DEPTH as u32;
             self.result.pv = self.extract_pv();
             self.result.time = self.start_time.elapsed();
             Search::print_info(&self.result);
@@ -270,7 +340,6 @@ impl Search {
         }
 
         //let futility_margin = 100 * depth as i32;
-        //let do_futility = depth <= 3 && !board.in_check() && static_eval + futility_margin < alpha;
 
         let mut moves = generate_moves(board);
 
@@ -286,7 +355,7 @@ impl Search {
         }
 
         if USE_MOVE_ORDERING {
-            self.order_moves(board, &mut moves, ply, hash_move);
+            order_moves(self, board, &mut moves, ply, hash_move);
         }
 
         let mut best_move = None;
@@ -295,34 +364,33 @@ impl Search {
 
         // Principal Variation Search
         for (i, &mov) in moves.iter().enumerate() {
-            //// Futility pruning, skip moves unlikely to improve alpha
-            //if do_futility && moves_searched > 0 && !board.is_capture(mov) && !board.gives_check(mov) && mov.move_type() == MoveType::Normal {
-            //    continue;
-            //}
+            // let evading_check = board.in_check();
 
             board.make_move(mov);
 
+            let gives_check = board.in_check();
+
             let mut extensions = 0;
 
-            let do_lmr = board.in_check() || self.is_killer_move(mov, ply) || board.is_capture(mov);
+            let do_lmr = !gives_check && !self.is_killer_move(mov, ply) && !board.is_capture(mov);
+            //let do_futility = board.is_capture(mov) && static_eval + futility_margin < alpha;
 
-            if board.in_check() {
+            if gives_check {
                 extensions += 1;
             }
 
-            //let mut eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1, -beta, -alpha, ply + 1);
             let mut eval;
 
             if i == 0 || !USE_PVS {
                 eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
-            } else if USE_LMR && i >= 4 && depth >= 3 && !do_lmr {
+            } else if USE_LMR && !do_lmr && i >= 4 && depth >= 3 {
                 //let reduction = (if board.is_capture(mov) || mov.is_promotion() {
                 //    0.20 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 3.35
                 //} else {
                 //    1.35 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 2.75
                 //} as u32);
                 //let reduction = 1;
-                //// Improved LMR formula with better tuned parameters
+                // Improved LMR formula with better tuned parameters
                 let is_tactical = board.is_capture(mov) || mov.is_promotion();
 
                 // Base reduction calculation
@@ -392,6 +460,7 @@ impl Search {
             if USE_ALPHA_BETA && eval >= beta {
                 evaluation_bound = Bound::Lower;
                 if !board.is_capture(mov) {
+                    self.history[board.side][mov.from()][mov.to()] += depth * depth;
                     self.update_killer_moves(mov, ply);
                 }
                 break;
@@ -435,7 +504,7 @@ impl Search {
             return stand_pat;
         }
 
-        self.order_moves(board, &mut moves, ply, None);
+        order_moves(self, board, &mut moves, ply, None);
 
         for mov in moves {
             board.make_move(mov);
@@ -503,75 +572,6 @@ impl Search {
         pv
     }
 
-    pub fn order_moves(&self, board: &Board, moves: &mut [Move], ply: u32, hash_move: Option<Move>) {
-        moves.sort_by_cached_key(|mov| -self.get_move_score(*mov, board, ply, hash_move));
-    }
-
-    fn get_move_score(&self, mov: Move, board: &Board, ply: u32, hash_move: Option<Move>) -> i32 {
-        if Some(mov) == self.result.pv.get(ply as usize).cloned() {
-            const PV_SCORE: i32 = 100000;
-            return PV_SCORE;
-        }
-
-        if Some(mov) == hash_move {
-            const HASH_MOVE_SCORE: i32 = 800000;
-            return HASH_MOVE_SCORE;
-        }
-
-        let mut score = 0;
-
-        if board.is_capture(mov) {
-            let captured_piece = board.squares[mov.to()].unwrap();
-            let moving_piece = board.squares[mov.from()].unwrap();
-            let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
-            const CAPTURE_BASE_SCORE: i32 = 1000;
-            score += CAPTURE_BASE_SCORE + capture_score;
-        } else if let Some(piece) = mov.move_type().promotion_piece() {
-            const PROMOTION_BASE_SCORE: i32 = 1000;
-            score += PROMOTION_BASE_SCORE + piece.centipawns() - PieceType::Pawn.centipawns();
-        } else if self.is_killer_move(mov, ply) {
-            const KILLER_MOVE_SCORE: i32 = 800;
-            score += KILLER_MOVE_SCORE;
-        }
-
-        score
-    }
-    //fn get_move_score(&self, mov: Move, board: &Board, ply: u32, hash_move: Option<Move>) -> i32 {
-    //    const HASH_MOVE_SCORE: i32 = 4000;
-    //    const CAPTURE_BASE_SCORE: i32 = 1000;
-    //    const KILLER_MOVE_SCORE: i32 = 800;
-
-    //    if let Some(pv_mov) = self.result.pv.get(ply as usize) {
-    //        if mov == *pv_mov {
-    //            return MAX_EVAL;
-    //        }
-    //    }
-
-    //    let mut score = 0;
-
-    //    if board.is_capture(mov) {
-    //        let captured_piece = board.squares[mov.to()].unwrap();
-    //        let moving_piece = board.squares[mov.from()].unwrap();
-    //        let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
-    //        score += CAPTURE_BASE_SCORE + capture_score;
-    //    } else {
-    //        for killer_move in &self.killer_moves[ply as usize] {
-    //            if let Some(killer) = killer_move {
-    //                if mov == *killer {
-    //                    score += KILLER_MOVE_SCORE;
-    //                    break;
-    //                }
-    //            }
-    //        }
-    //    }
-    //    if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-    //        if entry.best_move == mov {
-    //            score += HASH_MOVE_SCORE;
-    //        }
-    //    }
-    //    score
-    //}
-
     fn update_killer_moves(&mut self, mov: Move, ply: u32) {
         let ply = ply as usize;
         if !self.killer_moves[ply].contains(&Some(mov)) {
@@ -580,7 +580,7 @@ impl Search {
         }
     }
 
-    fn is_killer_move(&self, mov: Move, ply: u32) -> bool {
+    pub fn is_killer_move(&self, mov: Move, ply: u32) -> bool {
         for killer_move in self.killer_moves[ply as usize] {
             if let Some(killer) = killer_move {
                 if killer == mov {
@@ -594,7 +594,7 @@ impl Search {
     fn calculate_time(&mut self, board: &Board) -> u128 {
         let half_moves_left = Search::remaining_half_moves(board.total_material) as u128;
         let time_left = self.params.clock.time[board.side] + self.params.clock.inc[board.side] * half_moves_left / 2;
-        time_left / half_moves_left
+        (time_left / half_moves_left) / 2
     }
 
     // Approximation for amount of half moves remaining
@@ -649,6 +649,7 @@ impl Default for Search {
             should_quit: Arc::new(AtomicBool::new(false)),
             syzygy: pyrrhic_rs::TableBases::<Board>::new("./syzygy/tb345").unwrap(),
             previous_static_eval: 0,
+            history: [[[0; 64]; 64]; 2],
         }
     }
 }

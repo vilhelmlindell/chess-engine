@@ -13,10 +13,10 @@ rand = "0.8.5"
 bitflags = "2.5.0"
 arrayvec = "0.7.4"
 num_enum = "0.7.3"
-image = "0.25.4"
-imageproc = "0.25.0"
-rusttype = "0.9.3"
-ab_glyph = "0.2.29"
+#image = "0.25.4"
+#imageproc = "0.25.0"
+#rusttype = "0.9.3"
+#ab_glyph = "0.2.29"
 rand_chacha = "0.3.1"
 pyrrhic-rs = "0.2.0"
 ctor = "0.3.6"
@@ -25,3 +25,36 @@ ctor = "0.3.6"
 debug = true 
 lto = "fat"
 opt-level = 3
+
+# Add feature flags for your chess engine optimizations
+[features]
+# Individual optimization features
+tt = []
+lmr = []
+syzygy = []
+quiescence = []
+null-move = []
+move-ordering = []
+pvs = []
+alpha-beta = []
+aspiration = []
+futility = []
+# iterative-deepening = []
+
+# Default features (enable most optimizations)
+default = [
+    "tt", 
+    "lmr", 
+    "quiescence", 
+    "null-move", 
+    "move-ordering", 
+    "pvs", 
+    "alpha-beta", 
+    "aspiration", 
+    "futility", 
+    #    "iterative-deepening"
+]
+
+# Feature groups
+full = ["default", "syzygy"]  # Everything including tablebases
+minimal = ["alpha-beta", "move-ordering"]  # Just core functionality
