@@ -1,25 +1,64 @@
 #!/bin/bash
+# Script to run chess engine tournaments with any number of engines
 
-# Ensure two arguments (executable paths) are passed
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <executable_path_1> <executable_path_2>"
+# Check if at least one engine path is provided
+if [ "$#" -lt 1 ]; then
+    echo "Usage: $0 <executable_path_1> [executable_path_2] [executable_path_3] ..."
+    echo "At least one engine must be provided."
     exit 1
 fi
 
-# Extract the executable names from the paths
-exec1_name=$(basename "$1")
-exec2_name=$(basename "$2")
-
-# Check if the executables are the same
-if [ "$1" = "$2" ]; then
-    # If they are the same, append "_1" and "_2" to the names
-    exec1_name="${exec1_name}_1"
-    exec2_name="${exec2_name}_2"
+# Detect the number of available CPU cores
+if [ -f /proc/cpuinfo ]; then
+    # Linux
+    available_cpus=$(grep -c ^processor /proc/cpuinfo)
+elif [ "$(uname)" == "Darwin" ]; then
+    # macOS
+    available_cpus=$(sysctl -n hw.ncpu)
+else
+    # Default to 1 if we can't detect
+    available_cpus=1
 fi
 
+# Set concurrency to 75% of available CPUs, minimum 1
+concurrency=$(( (available_cpus * 3) / 4 ))
+[ $concurrency -lt 1 ] && concurrency=1
+
+echo "Detected $available_cpus CPU cores, setting concurrency to $concurrency"
+
+# Prepare engine parameters for fastchess
+engine_params=""
+engine_count=0
+
+# Process each engine path
+for engine_path in "$@"; do
+    # Extract the executable name from the path
+    engine_name=$(basename "$engine_path")
+    engine_count=$((engine_count+1))
+    
+    # Check if this engine name has already been used
+    # If there are duplicates, add numbers to make them unique
+    duplicate_count=0
+    for ((i=1; i<engine_count; i++)); do
+        if [ "$engine_name" = "$(basename "${!i}")" ]; then
+            duplicate_count=$((duplicate_count+1))
+        fi
+    done
+    
+    # If it's a duplicate, append a number
+    if [ $duplicate_count -gt 0 ]; then
+        engine_name="${engine_name}_$((duplicate_count+1))"
+    fi
+    
+    # Add this engine to the parameters
+    engine_params="$engine_params -engine cmd=\"$engine_path\" name=\"$engine_name\""
+done
+
+# Clean up any existing log files
 rm -rf fastchess_log
 
-# Run the chess engines with the appropriate names
-fastchess -engine cmd="$1" name="$exec1_name" -engine cmd="$2" name="$exec2_name" \
-          -openings file=Pohl.epd format=epd order=random \
-          -each tc=10+0.1 -rounds 100 -repeat -concurrency 8 -log file=fastchess_log engine=true
+# Build the full command
+# Use eval to properly handle the double quotes in engine_params
+eval "fastchess $engine_params \
+      -openings file=Pohl.epd format=epd order=random \
+      -each tc=10+0.1 -rounds 100 -repeat -concurrency $concurrency -log file=fastchess_log engine=true"

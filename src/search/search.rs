@@ -25,11 +25,11 @@ use super::move_ordering::order_moves;
 pub const MAX_DEPTH: usize = 100;
 pub const KILLER_MOVE_SLOTS: usize = 3;
 
-const MAX_EVAL: i32 = 1000000;
+const MAX_EVAL: i32 = 20000;
 
 // Transposition Table
 #[cfg(feature = "tt")]
-pub const USE_TT: bool = true;
+pub const USE_TT: bool = false;
 #[cfg(not(feature = "tt"))]
 pub const USE_TT: bool = false;
 
@@ -77,7 +77,7 @@ pub const USE_ALPHA_BETA: bool = false;
 
 // Aspiration windows
 #[cfg(feature = "aspiration")]
-pub const USE_ASPIRATION: bool = true;
+pub const USE_ASPIRATION: bool = false;
 #[cfg(not(feature = "aspiration"))]
 pub const USE_ASPIRATION: bool = false;
 
@@ -124,7 +124,7 @@ impl Search {
         self.result = SearchResult::default();
         self.pv_table = [[None; MAX_DEPTH]; MAX_DEPTH];
         self.pv_lengths = [0; MAX_DEPTH];
-        board.transposition_table.clear();
+        //board.transposition_table.clear();
 
         if search_params.use_book {
             if let Some(book_move) = get_book_move(board, 1.0) {
@@ -192,7 +192,6 @@ impl Search {
                     // Iterative deepening with gradually expanding windows
                     loop {
                         eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, alpha, beta, 0);
-
                         // Handle window failures
                         if eval <= alpha {
                             // Lower bound failure - expand window downward
@@ -278,18 +277,18 @@ impl Search {
 
         if USE_TT {
             if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-                if entry.hash == board.zobrist_hash && entry.depth >= depth && !is_root {
+                if entry.hash == board.zobrist_hash && entry.depth as u32 >= depth && !is_root && NODE_TYPE == NodeType::NonPV as u8 && !IS_NULL {
                     hash_move = Some(entry.best_move);
                     self.result.transpositions += 1;
 
                     match entry.node_type {
-                        Bound::Exact => return entry.eval,
-                        Bound::Lower => alpha = alpha.max(entry.eval),
-                        Bound::Upper => beta = beta.min(entry.eval),
+                        Bound::Exact => return entry.eval as i32,
+                        Bound::Lower => alpha = alpha.max(entry.eval as i32),
+                        Bound::Upper => beta = beta.min(entry.eval as i32),
                     }
 
                     if alpha >= beta {
-                        return entry.eval;
+                        return entry.eval as i32;
                     }
                 }
             }
@@ -459,6 +458,7 @@ impl Search {
 
             if USE_ALPHA_BETA && eval >= beta {
                 evaluation_bound = Bound::Lower;
+
                 if !board.is_capture(mov) {
                     self.history[board.side][mov.from()][mov.to()] += depth * depth;
                     self.update_killer_moves(mov, ply);
@@ -468,7 +468,7 @@ impl Search {
         }
 
         if let Some(best_move) = best_move {
-            let entry = TranspositionEntry::new(depth, best_eval, best_move, evaluation_bound, board.zobrist_hash);
+            let entry = TranspositionEntry::new(depth as u8, best_eval as i16, best_move, evaluation_bound, board.zobrist_hash);
             board.transposition_table.store(entry);
         }
 
@@ -631,6 +631,7 @@ impl Search {
         for mov in result.pv.iter() {
             print!("{} ", mov);
         }
+        //print!("transpositions {}", result.transpositions);
         println!();
     }
 }
