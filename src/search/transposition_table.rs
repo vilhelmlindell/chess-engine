@@ -1,9 +1,33 @@
-use crate::board::piece_move::Move;
+use ctor::ctor;
 
-pub const TABLE_SIZE: usize = mb_to_count(256);
+use crate::board::piece_move::Move;
+use std::mem::MaybeUninit;
+
+pub const TABLE_SIZE: usize = mb_to_count(64);
 
 pub const fn mb_to_count(mb: usize) -> usize {
     (mb * 1_000_000) / std::mem::size_of::<TranspositionEntry>()
+}
+
+pub static mut TRANSPOSITION_TABLE: MaybeUninit<TranspositionTable> = MaybeUninit::uninit();
+
+// For global static access - inherently unsafe
+pub fn global_store(entry: TranspositionEntry) {
+    unsafe {
+        (*TRANSPOSITION_TABLE.as_mut_ptr()).store(entry);
+    }
+}
+
+pub fn global_probe(hash: u64) -> Option<TranspositionEntry> {
+    unsafe { (*TRANSPOSITION_TABLE.as_mut_ptr()).probe(hash) }
+}
+
+// Then in your initialization function with the ctor library:
+#[ctor]
+fn initialize_table() {
+    unsafe {
+        TRANSPOSITION_TABLE.write(TranspositionTable::new());
+    }
 }
 
 #[derive(Clone)]
@@ -12,15 +36,19 @@ pub struct TranspositionTable {
 }
 
 impl TranspositionTable {
+    pub fn new() -> Self {
+        Self {
+            table: vec![None; TABLE_SIZE].into_boxed_slice().try_into().unwrap(),
+        }
+    }
     pub fn store(&mut self, entry: TranspositionEntry) {
         let index = self.get_index(entry.hash);
-        if let Some(existing) = self.table[index] {
-            if entry.depth > existing.depth {
-                self.table[index] = Some(entry);
-            }
-        } else {
-            self.table[index] = Some(entry);
-        }
+        self.table[index] = Some(entry);
+        //if let Some(existing) = self.table[index] {
+        //        self.table[index] = Some(entry);
+        //} else {
+        //    self.table[index] = Some(entry);
+        //}
     }
 
     pub fn probe(&self, hash: u64) -> Option<TranspositionEntry> {
@@ -46,13 +74,13 @@ impl TranspositionTable {
     }
 }
 
-impl Default for TranspositionTable {
-    fn default() -> Self {
-        Self {
-            table: vec![None; TABLE_SIZE].into_boxed_slice().try_into().unwrap(),
-        }
-    }
-}
+//impl Default for TranspositionTable {
+//    fn default() -> Self {
+//        Self {
+//            table: vec![None; TABLE_SIZE].into_boxed_slice().try_into().unwrap(),
+//        }
+//    }
+//}
 
 #[derive(Clone, Copy, Debug)]
 pub struct TranspositionEntry {

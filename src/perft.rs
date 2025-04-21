@@ -4,6 +4,7 @@ use crate::board::piece_move::{Move, MoveType};
 use crate::board::Board;
 use crate::move_generation::attack_tables::{get_between_ray, get_orthogonal_rays};
 use crate::move_generation::generate_moves;
+use crate::search::transposition_table::{Bound, TranspositionEntry};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
@@ -19,6 +20,7 @@ pub struct PerftResult {
     pub discovered_checks: u32,
     pub double_checks: u32,
     pub checkmates: u32,
+    pub tt_hits: u32,
 }
 
 impl Add for PerftResult {
@@ -35,6 +37,7 @@ impl Add for PerftResult {
             discovered_checks: self.discovered_checks + rhs.discovered_checks,
             double_checks: self.double_checks + rhs.double_checks,
             checkmates: self.checkmates + rhs.checkmates,
+            tt_hits: self.tt_hits + rhs.tt_hits,
         }
     }
 }
@@ -64,6 +67,7 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
 
         move_counter.insert(mov, result.nodes);
     }
+    println!("tt hits: {}", result.tt_hits);
     let mut sorted_keys: Vec<Move> = move_counter.keys().copied().collect();
     sorted_keys.sort();
     let mut sorted_moves = HashMap::new();
@@ -76,25 +80,69 @@ pub fn perft(fen: &str, depth: u32) -> PerftResult {
     result
 }
 
-fn search(result: &mut PerftResult, depth: u32, prev_mov: Move, board: &mut Board) {
+fn search(result: &mut PerftResult, depth: u32, prev_mov: Move, board: &mut Board) -> u64 {
     if depth == 0 {
         result.nodes += 1;
-        return;
+        return 1;
     }
 
-    let moves = generate_moves(board);
+    // Try to get the node count from the transposition table
+    // if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+    //     if entry.hash == board.zobrist_hash {
+    //         // This is a functional hit, we can use this result
+    //         result.tt_hits += 1;
+    //         return 0; // Assuming the score field can store the node count
+    //     }
+    // }
 
-    //if depth == 1 {
-    //    result.nodes += moves.len() as u64;
-    //    return;
-    //}
+    let moves = generate_moves(board);
+    let mut nodes = 0;
 
     for mov in moves {
         board.make_move(mov);
-        search(result, depth - 1, mov, board);
+        let move_nodes = search(result, depth - 1, mov, board);
+        nodes += move_nodes;
         board.unmake_move(mov);
     }
+
+    // Store the result in the transposition table
+    //board.transposition_table.store(TranspositionEntry::new(
+    //    depth as u8, 
+    //    nodes as i16, // Store the node count in the score field
+    //    prev_mov, 
+    //    Bound::Exact, 
+    //    board.zobrist_hash
+    //));
+
+    nodes
 }
+
+//fn search(result: &mut PerftResult, depth: u32, prev_mov: Move, board: &mut Board) {
+//    if depth == 0 {
+//        result.nodes += 1;
+//        return;
+//    }
+//
+//    if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+//        if entry.hash == board.zobrist_hash {
+//            result.tt_hits += 1;
+//        }
+//    }
+//    board.transposition_table.store(TranspositionEntry::new(depth as u8, 0, prev_mov, Bound::Exact, board.zobrist_hash));
+//
+//    let moves = generate_moves(board);
+//
+//    //if depth == 1 {
+//    //    result.nodes += moves.len() as u64;
+//    //    return;
+//    //}
+//
+//    for mov in moves {
+//        board.make_move(mov);
+//        search(result, depth - 1, mov, board);
+//        board.unmake_move(mov);
+//    }
+//}
 
 fn get_move_info(mov: Move, board: &Board, extra_info: bool) -> PerftResult {
     let mut info = PerftResult { nodes: 1, ..Default::default() };
@@ -206,3 +254,4 @@ mod tests {
         //assert_eq!(perft(fen, 6).nodes, 6923051137);
     }
 }
+

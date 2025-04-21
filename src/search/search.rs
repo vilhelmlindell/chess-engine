@@ -21,6 +21,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::move_ordering::order_moves;
+use super::transposition_table;
 
 pub const MAX_DEPTH: usize = 100;
 pub const KILLER_MOVE_SLOTS: usize = 3;
@@ -29,7 +30,7 @@ const MAX_EVAL: i32 = 20000;
 
 // Transposition Table
 #[cfg(feature = "tt")]
-pub const USE_TT: bool = false;
+pub const USE_TT: bool = true;
 #[cfg(not(feature = "tt"))]
 pub const USE_TT: bool = false;
 
@@ -77,7 +78,7 @@ pub const USE_ALPHA_BETA: bool = false;
 
 // Aspiration windows
 #[cfg(feature = "aspiration")]
-pub const USE_ASPIRATION: bool = false;
+pub const USE_ASPIRATION: bool = true;
 #[cfg(not(feature = "aspiration"))]
 pub const USE_ASPIRATION: bool = false;
 
@@ -276,10 +277,23 @@ impl Search {
         let mut hash_move = None;
 
         if USE_TT {
-            if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+            if let Some(entry) = transposition_table::global_probe(board.zobrist_hash) {
                 if entry.hash == board.zobrist_hash && entry.depth as u32 >= depth && !is_root && NODE_TYPE == NodeType::NonPV as u8 && !IS_NULL {
                     hash_move = Some(entry.best_move);
-                    self.result.transpositions += 1;
+                    //self.result.transpositions += 1;
+
+                    //match entry.node_type {
+                    //    Bound::Exact => {
+                    //        self.result.transpositions_exact += 1;
+                    //        return entry.eval as i32;
+                    //    },
+                    //    Bound::Lower => {
+                    //        self.result.transpositions_lower += 1;
+                    //        if entry.eval as i32 >= beta { return entry.eval as i32 }},
+                    //    Bound::Upper => {
+                    //        self.result.transpositions_upper += 1;
+                    //        if entry.eval as i32 <= alpha { return entry.eval  as i32 }},
+                    //}
 
                     match entry.node_type {
                         Bound::Exact => return entry.eval as i32,
@@ -469,7 +483,7 @@ impl Search {
 
         if let Some(best_move) = best_move {
             let entry = TranspositionEntry::new(depth as u8, best_eval as i16, best_move, evaluation_bound, board.zobrist_hash);
-            board.transposition_table.store(entry);
+            transposition_table::global_store(entry);
         }
 
         best_eval
@@ -494,7 +508,21 @@ impl Search {
             return beta;
         }
 
-        alpha = alpha.max(stand_pat);
+        let mut hash_move = None;
+
+        //if USE_TT {
+        //    if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
+        //        if entry.hash == board.zobrist_hash {
+        //            hash_move = Some(entry.best_move);
+        //            self.result.transpositions += 1;
+        //            match entry.node_type {
+        //                Bound::Exact => return entry.eval as i32,
+        //                Bound::Lower => if entry.eval as i32 >= beta { return entry.eval as i32 },
+        //                Bound::Upper => if entry.eval as i32 <= alpha { return entry.eval  as i32 },
+        //            }
+        //        }
+        //    }
+        //}
 
         // Generate and filter captures
         let mut moves = generate_moves(board);
@@ -504,7 +532,7 @@ impl Search {
             return stand_pat;
         }
 
-        order_moves(self, board, &mut moves, ply, None);
+        order_moves(self, board, &mut moves, ply, hash_move);
 
         for mov in moves {
             board.make_move(mov);
@@ -631,8 +659,12 @@ impl Search {
         for mov in result.pv.iter() {
             print!("{} ", mov);
         }
-        //print!("transpositions {}", result.transpositions);
         println!();
+        //println!("tt {}", result.transpositions);
+        //println!("tt_exact {}", result.transpositions_exact);
+        //println!("tt_lower {}", result.transpositions_lower);
+        //println!("tt_upper {}", result.transpositions_upper);
+        //println!();
     }
 }
 
@@ -662,6 +694,9 @@ pub struct SearchResult {
     pub highest_eval: i32,
     pub depth_reached: u32,
     pub nodes: u32,
+    pub transpositions_exact: u32,
+    pub transpositions_lower: u32,
+    pub transpositions_upper: u32,
     pub transpositions: u32,
     pub time: Duration,
 }

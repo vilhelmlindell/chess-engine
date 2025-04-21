@@ -1,10 +1,10 @@
 use std::io::{self, BufRead};
 use std::option::Option;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread::{self, spawn, JoinHandle};
 use std::time::Instant;
-use std::sync::mpsc;
 
 use chess_engine::bench;
 use chess_engine::board::zobrist_hash::initialize_zobrist_tables;
@@ -63,8 +63,8 @@ impl Uci {
             match stdin_channel.try_recv() {
                 Ok(line) => {
                     uci.parse_command(line);
-                },
-                Err(mpsc::TryRecvError::Empty) => {},
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => panic!("Channel disconnected"),
             }
 
@@ -86,7 +86,7 @@ impl Uci {
                         } else {
                             println!("bestmove (none)");
                         }
-                    },
+                    }
                     Err(e) => eprintln!("Search thread panicked: {:?}", e),
                 }
             } else {
@@ -106,7 +106,7 @@ impl Uci {
             "go" => self.go(full_command),
             "fen" => {
                 println!("{}", self.board.fen());
-            },
+            }
             "stop" => {
                 self.should_quit_search.store(true, Ordering::SeqCst);
             }
@@ -124,14 +124,14 @@ impl Uci {
         println!("uciok");
     }
     //fn register(&self, command: String) {
-        //let words = command.split_whitespace();
-        //words.next();
-        //while let token = words.next() {
-        //    match token {
-        //        "later" => return,
-        //        ""
-        //    }
-        //}
+    //let words = command.split_whitespace();
+    //words.next();
+    //while let token = words.next() {
+    //    match token {
+    //        "later" => return,
+    //        ""
+    //    }
+    //}
     //}
     fn set_debug(&mut self, command: String) {
         if command.ends_with("on") {
@@ -248,12 +248,31 @@ impl Uci {
             }
         }
 
+        //let mut search = Search::default();
+        //let mut board_clone = self.board.clone();
+        //search.should_quit = self.should_quit_search.clone();
+
+        //self.search_thread = Some(thread::spawn(move || {
+        //    let result = search.search(search_params, &mut board_clone);
+        //    result
+        //}));
+
         let mut search = Search::default();
+
+        // Time the cloning of the board
+        let clone_start = Instant::now();
         let mut board_clone = self.board.clone();
+        let clone_duration = clone_start.elapsed();
+        println!("Cloning the board took: {:?}", clone_duration);
+
         search.should_quit = self.should_quit_search.clone();
 
+        // Time the search itself inside the thread
         self.search_thread = Some(thread::spawn(move || {
+            let search_start = Instant::now();
             let result = search.search(search_params, &mut board_clone);
+            let search_duration = search_start.elapsed();
+            println!("Search took: {:?}", search_duration);
             result
         }));
     }
