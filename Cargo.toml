@@ -22,7 +22,7 @@ pyrrhic-rs = "0.2.0"
 ctor = "0.3.6"
 
 [profile.release]
-debug = true 
+debug = true
 lto = "fat"
 opt-level = 3
 
@@ -38,7 +38,7 @@ move-ordering = []
 pvs = []
 alpha-beta = []
 aspiration = []
-futility = []
+# futility = []
 # iterative-deepening = []
 
 # Default features (enable most optimizations)
@@ -51,10 +51,11 @@ default = [
     "pvs", 
     "alpha-beta", 
     "aspiration", 
-    "futility", 
+    # "futility", 
+    "syzygy"
     #    "iterative-deepening"
 ]
 
 # Feature groups
-full = ["default", "syzygy"]  # Everything including tablebases
+full = ["default"]  # Everything including tablebases
 minimal = ["alpha-beta", "move-ordering"]  # Just core functionality
