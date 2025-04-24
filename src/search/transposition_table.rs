@@ -3,10 +3,10 @@ use ctor::ctor;
 use crate::board::piece_move::Move;
 use std::mem::MaybeUninit;
 
-pub const TABLE_SIZE: usize = mb_to_count(64);
+pub const TABLE_SIZE: usize = mb_to_count(256);
 
 pub const fn mb_to_count(mb: usize) -> usize {
-    (mb * 1_000_000) / std::mem::size_of::<TranspositionEntry>()
+    (mb * 1_004_858) / std::mem::size_of::<TranspositionEntry>()
 }
 
 pub static mut TRANSPOSITION_TABLE: MaybeUninit<TranspositionTable> = MaybeUninit::uninit();

@@ -83,10 +83,10 @@ pub const USE_ASPIRATION: bool = true;
 pub const USE_ASPIRATION: bool = false;
 
 // Futility pruning
-#[cfg(feature = "futility")]
-pub const USE_FUTILITY: bool = true;
-#[cfg(not(feature = "futility"))]
-pub const USE_FUTILITY: bool = false;
+// #[cfg(feature = "futility")]
+// pub const USE_FUTILITY: bool = true;
+// #[cfg(not(feature = "futility"))]
+// pub const USE_FUTILITY: bool = false;
 
 // Iterative deepening
 //#[cfg(feature = "iterative-deepening")]
@@ -278,9 +278,10 @@ impl Search {
 
         if USE_TT {
             if let Some(entry) = transposition_table::global_probe(board.zobrist_hash) {
-                if entry.hash == board.zobrist_hash && entry.depth as u32 >= depth && !is_root && NODE_TYPE == NodeType::NonPV as u8 && !IS_NULL {
+                //if entry.hash == board.zobrist_hash && entry.depth as u32 >= depth && !is_root && NODE_TYPE == NodeType::NonPV as u8 && !IS_NULL {
+                if entry.hash == board.zobrist_hash && entry.depth as u32 >= depth && !is_root && !IS_NULL {
                     hash_move = Some(entry.best_move);
-                    //self.result.transpositions += 1;
+                    self.result.transpositions += 1;
 
                     //match entry.node_type {
                     //    Bound::Exact => {
@@ -397,33 +398,33 @@ impl Search {
             if i == 0 || !USE_PVS {
                 eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
             } else if USE_LMR && !do_lmr && i >= 4 && depth >= 3 {
-                //let reduction = (if board.is_capture(mov) || mov.is_promotion() {
-                //    0.20 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 3.35
-                //} else {
-                //    1.35 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 2.75
-                //} as u32);
+                let reduction = (if board.is_capture(mov) || mov.is_promotion() {
+                    0.20 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 3.35
+                } else {
+                    1.35 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 2.75
+                } as u32);
                 //let reduction = 1;
                 // Improved LMR formula with better tuned parameters
-                let is_tactical = board.is_capture(mov) || mov.is_promotion();
+                //let is_tactical = board.is_capture(mov) || mov.is_promotion();
 
-                // Base reduction calculation
-                let base = if is_tactical { 0.5 } else { 1.0 };
+                //// Base reduction calculation
+                //let base = if is_tactical { 0.5 } else { 1.0 };
 
-                // Calculate dynamic reduction based on depth and move index
-                // Lower divisor for tactical moves to reduce less
-                let divisor = if is_tactical { 3.5 } else { 2.25 };
-                let reduction = (base + (depth as f64).ln() * (i as f64).ln() / divisor).max(1.0) as u32;
+                //// Calculate dynamic reduction based on depth and move index
+                //// Lower divisor for tactical moves to reduce less
+                //let divisor = if is_tactical { 3.5 } else { 2.25 };
+                //let reduction = (base + (depth as f64).ln() * (i as f64).ln() / divisor).max(1.0) as u32;
 
                 // Ensure we don't reduce too much
                 let reduced_depth = (depth - 1 - reduction).max(1);
 
-                eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
+                eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
 
                 if eval > alpha {
-                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1 + extensions, -(alpha + 1), -alpha, ply + 1);
+                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, depth - 1 + extensions, -(alpha + 1), -alpha, ply + 1);
 
                     if on_pv && eval > alpha && eval < beta {
-                        eval = -self.pvs::<{ NodeType::PV as u8 }, true>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
+                        eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
                     }
                 }
             } else {
@@ -660,11 +661,12 @@ impl Search {
             print!("{} ", mov);
         }
         println!();
-        //println!("tt {}", result.transpositions);
-        //println!("tt_exact {}", result.transpositions_exact);
-        //println!("tt_lower {}", result.transpositions_lower);
-        //println!("tt_upper {}", result.transpositions_upper);
-        //println!();
+        println!("tt {}", result.transpositions);
+        println!("tt_exact {}", result.transpositions_exact);
+        println!("tt_lower {}", result.transpositions_lower);
+        println!("tt_upper {}", result.transpositions_upper);
+        println!("transpositions {}", result.transpositions);
+        println!();
     }
 }
 

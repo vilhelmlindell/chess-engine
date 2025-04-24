@@ -248,33 +248,33 @@ impl Uci {
             }
         }
 
-        //let mut search = Search::default();
-        //let mut board_clone = self.board.clone();
-        //search.should_quit = self.should_quit_search.clone();
-
-        //self.search_thread = Some(thread::spawn(move || {
-        //    let result = search.search(search_params, &mut board_clone);
-        //    result
-        //}));
-
         let mut search = Search::default();
-
-        // Time the cloning of the board
-        let clone_start = Instant::now();
         let mut board_clone = self.board.clone();
-        let clone_duration = clone_start.elapsed();
-        println!("Cloning the board took: {:?}", clone_duration);
-
         search.should_quit = self.should_quit_search.clone();
 
-        // Time the search itself inside the thread
         self.search_thread = Some(thread::spawn(move || {
-            let search_start = Instant::now();
             let result = search.search(search_params, &mut board_clone);
-            let search_duration = search_start.elapsed();
-            println!("Search took: {:?}", search_duration);
             result
         }));
+
+        //let mut search = Search::default();
+
+        //// Time the cloning of the board
+        ////let clone_start = Instant::now();
+        //let mut board_clone = self.board.clone();
+        ////let clone_duration = clone_start.elapsed();
+        ////println!("Cloning the board took: {:?}", clone_duration);
+
+        //search.should_quit = self.should_quit_search.clone();
+
+        //// Time the search itself inside the thread
+        //self.search_thread = Some(thread::spawn(move || {
+        //    //let search_start = Instant::now();
+        //    let result = search.search(search_params, &mut board_clone);
+        //    //let search_duration = search_start.elapsed();
+        //    //println!("Search took: {:?}", search_duration);
+        //    result
+        //}));
     }
 
     fn ponder(&self) {}
