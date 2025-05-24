@@ -778,7 +778,7 @@ impl Default for BoardState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{board, move_generation::generate_moves};
+    use crate::move_generation::generate_moves;
 
     #[test]
     fn test_load_fen() {

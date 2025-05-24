@@ -2,7 +2,6 @@ use crate::board::{Board, Side};
 use rand::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
-use std::sync::LazyLock;
 use ctor::ctor;
 
 use super::piece::Piece;

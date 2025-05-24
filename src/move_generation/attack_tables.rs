@@ -1,11 +1,10 @@
 use crate::board::bitboard::Bitboard;
-use crate::board::direction::{self, Direction};
+use crate::board::direction::Direction;
 use crate::board::piece_move::Square;
 use crate::board::Side;
 use crate::move_generation::magic_numbers::*;
 use std::cmp::min;
 use std::num::Wrapping;
-use std::sync::LazyLock;
 use ctor::ctor;
 
 static mut SQUARES_TO_EDGE: [[u32; 8]; 64] = [[0; 8]; 64];

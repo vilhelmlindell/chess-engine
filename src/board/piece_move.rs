@@ -41,7 +41,7 @@ pub struct Move {
 }
 
 impl Move {
-    pub fn new(start_square: usize, end_square: usize, move_type: MoveType) -> Move {
+    pub fn new(start_square: Square, end_square: Square, move_type: MoveType) -> Move {
         //assert!(start_square < 64, "start square can't be larger than 63");
         //assert!(end_square < 64, "end square can't be larger than 63");
 

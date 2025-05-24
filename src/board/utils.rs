@@ -1,4 +1,4 @@
-pub type Square = usize;
+use super::piece_move::Square;
 
 pub fn flip_rank(square: Square) -> Square {
     let rank = square / 8;

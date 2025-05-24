@@ -14,12 +14,12 @@ pub static mut TRANSPOSITION_TABLE: MaybeUninit<TranspositionTable> = MaybeUnini
 // For global static access - inherently unsafe
 pub fn global_store(entry: TranspositionEntry) {
     unsafe {
-        (*TRANSPOSITION_TABLE.as_mut_ptr()).store(entry);
+        (TRANSPOSITION_TABLE.assume_init_mut()).store(entry);
     }
 }
 
 pub fn global_probe(hash: u64) -> Option<TranspositionEntry> {
-    unsafe { (*TRANSPOSITION_TABLE.as_mut_ptr()).probe(hash) }
+    unsafe { (TRANSPOSITION_TABLE.assume_init_ref()).probe(hash) }
 }
 
 // Then in your initialization function with the ctor library:

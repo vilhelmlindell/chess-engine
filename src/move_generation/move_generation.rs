@@ -2,7 +2,7 @@ use super::attack_tables::*;
 use crate::board::bitboard::Bitboard;
 use crate::board::direction::Direction;
 use crate::board::piece::{Piece, PieceType};
-use crate::board::piece_move::Move;
+use crate::board::piece_move::{Move, Square};
 use crate::board::piece_move::MoveType;
 use crate::board::Board;
 use crate::board::Side;
@@ -72,8 +72,8 @@ fn generate_pawn_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGA
     let pushed = pawns.shift(up) & !board.occupied_squares;
     let double_pushed = (pushed & double_push_rank).shift(up) & !board.occupied_squares;
 
-    let normal_move = |to, direction: Direction| Move::new((to as i32 - direction.value()) as usize, to, MoveType::Normal);
-    let double_push_move = |to| Move::new((to as i32 - up.value() * 2) as usize, to, MoveType::DoublePush);
+    let normal_move = |to, direction: Direction| Move::new((to as i32 - direction.value()) as Square, to, MoveType::Normal);
+    let double_push_move = |to| Move::new((to as i32 - up.value() * 2) as Square, to, MoveType::DoublePush);
 
     add_moves(|to| normal_move(to, up), moves, pushed, board);
     add_moves(double_push_move, moves, double_pushed, board);
@@ -85,13 +85,14 @@ fn generate_pawn_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGA
     add_moves(|to| normal_move(to, up_left), moves, captures_up_left, board);
 
     let promotable = board.piece_squares[Piece::new(PieceType::Pawn, board.side)] & pre_promotion_rank;
+    let test = Vec::<i32>::new();
 
     if promotable != 0 {
         let promotions_up = promotable.shift(up) & !board.occupied_squares;
         let promotions_up_right = promotable.shift(up_right) & board.enemy_squares();
         let promotions_up_left = promotable.shift(up_left) & board.enemy_squares();
 
-        let promotion_move = |to, direction: Direction| (to as i32 - direction.value()) as usize;
+        let promotion_move = |to, direction: Direction| (to as i32 - direction.value()) as Square;
 
         add_promotions(|to| promotion_move(to, up), moves, promotions_up, board);
         add_promotions(|to| promotion_move(to, up_right), moves, promotions_up_right, board);
@@ -250,7 +251,7 @@ fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board:
             return;
         }
 
-        let target_square = (to as i32 + Direction::down(board.side).value()) as usize;
+        let target_square = (to as i32 + Direction::down(board.side).value()) as Square;
         let rank = RANKS[7 - square / 8];
         let attackers = board.piece_squares[Piece::new(PieceType::Queen, board.side.enemy())] | board.piece_squares[Piece::new(PieceType::Rook, board.side.enemy())] & rank;
 
@@ -302,18 +303,18 @@ fn resolve_single_check<const IS_WHITE: bool>(attacker_square: usize, moves: &mu
         if promoting_pawns != 0 {
             pushed_pawns ^= promoting_pawns;
             for promotion_type in MoveType::PROMOTIONS {
-                add_moves(&|to| Move::new((to as i32 + Direction::down(board.side).value()) as usize, to, promotion_type), moves, promoting_pawns & attack_ray, board);
+                add_moves(&|to| Move::new((to as i32 + Direction::down(board.side).value()) as Square, to, promotion_type), moves, promoting_pawns & attack_ray, board);
             }
         }
         let rank = if IS_WHITE { RANK_3 } else { RANK_6 };
         let double_pushed_pawns = push_pawns::<IS_WHITE>(pushed_pawns & rank, !board.occupied_squares);
 
-        add_moves(|to| Move::new((to as i32 + Direction::down(board.side).value()) as usize, to, MoveType::Normal), moves, pushed_pawns & attack_ray, board);
-        add_moves(|to| Move::new((to as i32 + Direction::down(board.side).value() * 2) as usize, to, MoveType::DoublePush), moves, double_pushed_pawns & attack_ray, board);
+        add_moves(|to| Move::new((to as i32 + Direction::down(board.side).value()) as Square, to, MoveType::Normal), moves, pushed_pawns & attack_ray, board);
+        add_moves(|to| Move::new((to as i32 + Direction::down(board.side).value() * 2) as Square, to, MoveType::DoublePush), moves, double_pushed_pawns & attack_ray, board);
 
         // look for en passant blocks or captures
         if let Some(to) = board.state().en_passant_square {
-            if attack_ray & Bitboard::from_square(to) != 0 || (to as i32 + Direction::down(board.side).value()) as usize == attacker_square {
+            if attack_ray & Bitboard::from_square(to) != 0 || (to as i32 + Direction::down(board.side).value()) as Square == attacker_square {
                 generate_en_passant_moves(moves, board);
             }
         }
@@ -326,7 +327,7 @@ fn resolve_single_check<const IS_WHITE: bool>(attacker_square: usize, moves: &mu
     }
 
     if let Some(to) = board.state().en_passant_square {
-        if (to as i32 + Direction::down(board.side).value()) as usize == attacker_square {
+        if (to as i32 + Direction::down(board.side).value()) as Square == attacker_square {
             generate_en_passant_moves(moves, board);
         }
     }
