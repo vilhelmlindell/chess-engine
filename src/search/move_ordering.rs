@@ -1,75 +1,122 @@
-use crate::board::{piece::PieceType, piece_move::Move, Board};
+use arrayvec::ArrayVec;
 
-use super::Search;
+use crate::{
+    board::{piece::PieceType, piece_move::Move, Board},
+    move_generation::{MoveVec, MAX_LEGAL_MOVES},
+};
 
-// Define an enum for move categories with explicit ordering
-#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
-enum MoveCategory {
-    PvMove = 7,
-    HashMove = 6,
-    WinningCapture = 5,
-    EqualCapture = 4,
-    Promotion = 3,
-    KillerMove = 2,
-    QuietMove = 1,
-    LosingCapture = 0,
+use super::{search, Search, KILLER_MOVE_SLOTS, MAX_DEPTH, USE_KILLER};
+
+pub struct MoveOrderer {
+    pub moves: MoveVec,
+    pub move_scores: [u32; MAX_LEGAL_MOVES],
+    pub start: usize,
 }
 
-pub fn order_moves(search: &Search, board: &Board, moves: &mut [Move], ply: u32, hash_move: Option<Move>) {
-    moves.sort_by_cached_key(|mov| {
-        let (category, score) = categorize_move(search, *mov, board, ply, hash_move);
-        // Use tuple for sorting: primary sort by category (high to low), secondary by score within category
-        (-(category as i32), -score)
-    });
+impl MoveOrderer {
+    pub fn new(moves: MoveVec, search: &Search, hash_move: Option<Move>, ply: u32) -> Self {
+        let mut move_scores = [0; MAX_LEGAL_MOVES];
+        Self { moves, move_scores, start: 0 }
+    }
+    pub fn next<const SHOULD_SCORE: bool>(&mut self, search: &Search, hash_move: Option<Move>, ply: u32) -> Option<Move> {
+        if self.start >= self.moves.len() {
+            return None;
+        }
+
+        let mut highest_score = 0;
+        let mut best_i = self.start;
+        for i in self.start..self.moves.len() {
+            if SHOULD_SCORE {
+                self.move_scores[i] = move_score(self.moves[i], search, hash_move, ply)
+            }
+            if self.move_scores[i] > highest_score {
+                best_i = i;
+                highest_score = self.move_scores[i];
+            }
+        }
+
+        let mov = self.moves[best_i];
+        self.moves.swap(self.start, best_i);
+        self.move_scores.swap(self.start, best_i);
+        self.start += 1;
+        return Some(mov);
+    }
 }
 
-fn categorize_move(search: &Search, mov: Move, board: &Board, ply: u32, hash_move: Option<Move>) -> (MoveCategory, i32) {
-    // Check for PV move
+pub enum MoveCategory {
+    QuietMove,
+    LosingCapture,
+    EqualCapture,
+    KillerMove,
+    WinningCapture,
+    Promotion,
+    HashMove,
+    PvMove,
+}
+
+impl MoveCategory {
+    pub fn base_score(self) -> u32 {
+        (self as u32) << 24
+    }
+}
+
+fn move_score(mov: Move, search: &Search, hash_move: Option<Move>, ply: u32) -> u32 {
     if Some(mov) == search.result.pv.get(ply as usize).cloned() {
-        return (MoveCategory::PvMove, 0);
+        return MoveCategory::PvMove.base_score();
     }
 
-    // Check for hash move
     if Some(mov) == hash_move {
-        return (MoveCategory::HashMove, 0);
+        return MoveCategory::HashMove.base_score();
     }
 
-    // Handle captures
-    if board.is_capture(mov) {
-        let captured_piece = board.squares[mov.to()].unwrap();
-        let moving_piece = board.squares[mov.from()].unwrap();
+    if search.board.is_capture(mov) {
+        let captured_piece = search.board.squares[mov.to()].unwrap();
+        let moving_piece = search.board.squares[mov.from()].unwrap();
         let capture_score = captured_piece.piece_type().centipawns() - moving_piece.piece_type().centipawns();
 
         if capture_score > 0 {
-            return (MoveCategory::WinningCapture, capture_score);
+            return (MoveCategory::WinningCapture.base_score() as i32 + capture_score) as u32;
         } else if capture_score == 0 {
-            return (MoveCategory::EqualCapture, 0);
+            return MoveCategory::EqualCapture.base_score();
         } else {
-            return (MoveCategory::LosingCapture, capture_score);
+            return (MoveCategory::LosingCapture.base_score() as i32 + capture_score) as u32;
         }
     }
 
-    // Handle promotions
     if let Some(piece) = mov.move_type().promotion_piece() {
-        let promotion_score = piece.centipawns() - PieceType::Pawn.centipawns();
-        return (MoveCategory::Promotion, promotion_score);
+        let promotion_score = (piece.centipawns() - PieceType::Pawn.centipawns()) as u32;
+        return MoveCategory::Promotion.base_score() + promotion_score;
     }
 
-    // Handle killer moves
-    if search.is_killer_move(mov, ply) {
-        return (MoveCategory::KillerMove, 0);
+    if USE_KILLER && search.is_killer(mov, ply) {
+        return MoveCategory::KillerMove.base_score();
     }
 
-    // Handle quiet moves with history score
-    let history_score = search.history[board.side][mov.from()][mov.to()] as i32;
-    (MoveCategory::QuietMove, history_score)
+    let history_score = search.history[search.board.side][mov.from()][mov.to()];
+    MoveCategory::QuietMove.base_score() + history_score
 }
 
-// Original move_score kept for compatibility if needed elsewhere
-fn move_score(search: &mut Search, mov: Move, board: &Board, ply: u32, hash_move: Option<Move>) -> i32 {
-    let (category, score) = categorize_move(search, mov, board, ply, hash_move);
+pub mod test {
+    use std::collections::HashSet;
 
-    // Combine category and score for a single integer value
-    // Category is the primary component (shifted left), score is secondary
-    ((category as i32) << 24) + score
+    use crate::{board, move_generation::generate_moves};
+
+    use super::*;
+    #[test]
+    fn move_orderer_iterator() {
+        let search = Search {
+            board: Board::from_fen("rnb1kbnr/ppp1pppp/8/3q4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1"),
+            ..Default::default()
+        };
+        let moves = generate_moves(&search.board);
+        let mut iterated_moves = Vec::new();
+        let mut move_orderer = MoveOrderer::new(moves.clone(), &search, None, 0);
+        for mov in move_orderer {
+            iterated_moves.push(mov);
+            println!("mov: {}", mov);
+        }
+        let m1: HashSet<_> = moves.iter().cloned().collect();
+        let m2: HashSet<_> = iterated_moves.iter().cloned().collect();
+        assert_eq!(m1.symmetric_difference(&m2).count(), 0);
+    }
 }

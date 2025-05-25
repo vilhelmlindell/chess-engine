@@ -248,12 +248,14 @@ impl Uci {
             }
         }
 
-        let mut search = Search::default();
-        let mut board_clone = self.board.clone();
+        let mut search = Search {
+            board: self.board.clone(),
+            ..Default::default()
+        };
         search.should_quit = self.should_quit_search.clone();
 
         self.search_thread = Some(thread::spawn(move || {
-            let result = search.search(search_params, &mut board_clone);
+            let result = search.search(search_params);
             result
         }));
 

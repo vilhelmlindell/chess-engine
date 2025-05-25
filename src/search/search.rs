@@ -20,7 +20,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use super::move_ordering::order_moves;
+use super::move_ordering::MoveOrderer;
 use super::transposition_table;
 
 pub const MAX_DEPTH: usize = 100;
@@ -82,6 +82,11 @@ pub const USE_ASPIRATION: bool = true;
 #[cfg(not(feature = "aspiration"))]
 pub const USE_ASPIRATION: bool = false;
 
+#[cfg(feature = "killer")]
+pub const USE_KILLER: bool = false;
+#[cfg(not(feature = "killer"))]
+pub const USE_KILLER: bool = false;
+
 // Futility pruning
 // #[cfg(feature = "futility")]
 // pub const USE_FUTILITY: bool = true;
@@ -104,10 +109,11 @@ pub enum NodeType {
 }
 
 pub struct Search {
+    pub board: Board,
     pub params: SearchParams,
     pub result: SearchResult,
     pub max_time: u128,
-    pub killer_moves: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
+    pub killers: [[Option<Move>; KILLER_MOVE_SLOTS]; MAX_DEPTH],
     pub pv_table: [[Option<Move>; MAX_DEPTH]; MAX_DEPTH], // Initialize PV table
     pub pv_lengths: [usize; MAX_DEPTH],
     //pub pv: Vec<Move>,
@@ -115,32 +121,32 @@ pub struct Search {
     pub root_ply: u32,
     pub syzygy: pyrrhic_rs::TableBases<Board>,
     pub start_time: Instant,
-    pub previous_static_eval: i32,
+    pub prev_static_eval: i32,
     pub history: [[[u32; 64]; 64]; 2],
 }
 
 impl Search {
-    pub fn search(&mut self, search_params: SearchParams, board: &mut Board) -> SearchResult {
+    pub fn search(&mut self, search_params: SearchParams) -> SearchResult {
         self.should_quit.store(false, std::sync::atomic::Ordering::SeqCst);
         self.result = SearchResult::default();
         self.pv_table = [[None; MAX_DEPTH]; MAX_DEPTH];
         self.pv_lengths = [0; MAX_DEPTH];
-        //board.transposition_table.clear();
+        //self.board.transposition_table.clear();
 
         if search_params.use_book {
-            if let Some(book_move) = get_book_move(board, 1.0) {
+            if let Some(book_move) = get_book_move(&self.board, 1.0) {
                 self.result.pv.push(book_move);
                 return self.result.clone();
             }
         }
 
         self.params = search_params;
-        self.killer_moves = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
+        self.killers = [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH];
         self.start_time = Instant::now();
-        self.root_ply = board.ply;
+        self.root_ply = self.board.ply;
 
-        if USE_SYZYGY && board.occupied_squares.count_ones() <= 5 {
-            let result = self.probe_syzygy_root(board);
+        if USE_SYZYGY && self.board.occupied_squares.count_ones() <= 5 {
+            let result = self.probe_syzygy_root();
             match result.root {
                 pyrrhic_rs::DtzProbeValue::Stalemate => return self.result.clone(),
                 pyrrhic_rs::DtzProbeValue::Checkmate => return self.result.clone(),
@@ -171,7 +177,7 @@ impl Search {
         self.max_time = match search_params.search_mode {
             SearchMode::Infinite => u128::max_value(),
             SearchMode::MoveTime => search_params.move_time,
-            SearchMode::Clock => self.calculate_time(board),
+            SearchMode::Clock => self.calculate_time(),
         };
         //self.max_time = 3000;
 
@@ -181,7 +187,7 @@ impl Search {
                 let mut eval;
 
                 if !USE_ASPIRATION || depth < 4 {
-                    eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+                    eval = self.pvs::<{ NodeType::Root as u8 }, false>(depth, -MAX_EVAL, MAX_EVAL, 0);
                 } else {
                     const WINDOW_SIZE: i32 = 33;
 
@@ -192,7 +198,7 @@ impl Search {
 
                     // Iterative deepening with gradually expanding windows
                     loop {
-                        eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, alpha, beta, 0);
+                        eval = self.pvs::<{ NodeType::Root as u8 }, false>(depth, alpha, beta, 0);
                         // Handle window failures
                         if eval <= alpha {
                             // Lower bound failure - expand window downward
@@ -210,7 +216,7 @@ impl Search {
                         // Safety check for too many window re-searches
                         if window_size >= MAX_EVAL / 2 {
                             // If windows are getting too large, do a full-width search
-                            eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, depth, -MAX_EVAL, MAX_EVAL, 0);
+                            eval = self.pvs::<{ NodeType::Root as u8 }, false>(depth, -MAX_EVAL, MAX_EVAL, 0);
                             break;
                         }
                     }
@@ -229,7 +235,7 @@ impl Search {
         } else {
             unimplemented!("iterative deepening needs to be enabled");
             // Non-iterative deepening: search to the maximum depth directly
-            let eval = self.pvs::<{ NodeType::Root as u8 }, false>(board, MAX_DEPTH as u32, -MAX_EVAL, MAX_EVAL, 0);
+            let eval = self.pvs::<{ NodeType::Root as u8 }, false>(MAX_DEPTH as u32, -MAX_EVAL, MAX_EVAL, 0);
 
             self.result.highest_eval = eval;
             self.result.depth_reached = MAX_DEPTH as u32;
@@ -240,7 +246,7 @@ impl Search {
 
         self.result.clone()
     }
-    fn pvs<const NODE_TYPE: u8, const IS_NULL: bool>(&mut self, board: &mut Board, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
+    fn pvs<const NODE_TYPE: u8, const IS_NULL: bool>(&mut self, depth: u32, mut alpha: i32, mut beta: i32, ply: u32) -> i32 {
         let on_pv = NODE_TYPE != NodeType::NonPV as u8;
         let is_root = NODE_TYPE == NodeType::Root as u8;
 
@@ -250,19 +256,19 @@ impl Search {
             return 0;
         }
 
-        if board.state().halfmove_clock >= 100 {
+        if self.board.state().halfmove_clock >= 100 {
             return 0;
         }
 
-        if !is_root && board.is_repetition(on_pv) {
+        if !is_root && self.board.is_repetition(on_pv) {
             return 0;
         }
 
         if depth == 0 {
             if USE_QUIESCENCE {
-                return self.quiescence_search(board, alpha, beta, ply);
+                return self.quiescence_search(alpha, beta, ply);
             } else {
-                return evaluate(board);
+                return evaluate(&self.board);
             }
         }
 
@@ -277,9 +283,9 @@ impl Search {
         let mut hash_move = None;
 
         if USE_TT {
-            if let Some(entry) = transposition_table::global_probe(board.zobrist_hash) {
-                //if entry.hash == board.zobrist_hash && entry.depth as u32 >= depth && !is_root && NODE_TYPE == NodeType::NonPV as u8 && !IS_NULL {
-                if entry.hash == board.zobrist_hash && entry.depth as u32 >= depth && !is_root && !IS_NULL {
+            if let Some(entry) = transposition_table::global_probe(self.board.zobrist_hash) {
+                //if entry.hash == self.board.zobrist_hash && entry.depth as u32 >= depth && !is_root && NODE_TYPE == NodeType::NonPV as u8 && !IS_NULL {
+                if entry.hash == self.board.zobrist_hash && entry.depth as u32 >= depth && !is_root && !IS_NULL {
                     hash_move = Some(entry.best_move);
                     self.result.transpositions += 1;
 
@@ -311,13 +317,13 @@ impl Search {
 
         //let hash_move = tt_hit.map(|entry| entry.best_move);
 
-        if USE_SYZYGY && board.occupied_squares.count_ones() <= 5 {
-            let result = self.probe_syzygy_root(board);
+        if USE_SYZYGY && self.board.occupied_squares.count_ones() <= 5 {
+            let result = self.probe_syzygy_root();
             match result.root {
                 pyrrhic_rs::DtzProbeValue::Stalemate => return 0,
                 pyrrhic_rs::DtzProbeValue::Checkmate => {
-                    let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
-                    if board.attacked(king_square) {
+                    let king_square = self.board.piece_squares[Piece::new(PieceType::King, self.board.side) as usize].lsb();
+                    if self.board.attacked(king_square) {
                         return -MAX_EVAL + ply as i32;
                     } else {
                         return MAX_EVAL - ply as i32;
@@ -342,10 +348,10 @@ impl Search {
 
         if USE_NULL_MOVE {
             let reduction = 2;
-            if !IS_NULL && !board.in_check() && depth > reduction + 1 {
-                board.make_null_move();
-                let null_move_eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(board, depth - 1 - reduction, -beta, -beta + 1, ply + 1);
-                board.unmake_null_move();
+            if !IS_NULL && !self.board.in_check() && depth > reduction + 1 {
+                self.board.make_null_move();
+                let null_move_eval = -self.pvs::<{ NodeType::NonPV as u8 }, true>(depth - 1 - reduction, -beta, -beta + 1, ply + 1);
+                self.board.unmake_null_move();
 
                 if null_move_eval >= beta {
                     return null_move_eval; // Beta cutoff, prune this node
@@ -355,39 +361,50 @@ impl Search {
 
         //let futility_margin = 100 * depth as i32;
 
-        let mut moves = generate_moves(board);
+        let mut moves = generate_moves(&self.board);
 
         // Check for terminal positions
         // TODO: Remove this if by setting score to mate score
         if moves.is_empty() {
-            let king_square = board.piece_squares[Piece::new(PieceType::King, board.side) as usize].lsb();
-            return if board.attacked(king_square) {
+            let king_square = self.board.piece_squares[Piece::new(PieceType::King, self.board.side) as usize].lsb();
+            return if self.board.attacked(king_square) {
                 -MAX_EVAL + ply as i32
             } else {
                 0 // Stalemate
             };
         }
 
-        if USE_MOVE_ORDERING {
-            order_moves(self, board, &mut moves, ply, hash_move);
-        }
+        //let move_iter: Box<dyn Iterator<Item = Move>> = if USE_MOVE_ORDERING {
+        //    Box::new(MoveOrderer::new(moves, self, hash_move, ply).into_iter())
+        //} else {
+        //    Box::new(moves.into_iter())
+        //};
 
         let mut best_move = None;
         let mut best_eval = -MAX_EVAL + ply as i32;
         let mut evaluation_bound = Bound::Upper;
 
-        // Principal Variation Search
-        for (i, &mov) in moves.iter().enumerate() {
-            // let evading_check = board.in_check();
+        let mut move_iter = MoveOrderer::new(moves, self, hash_move, ply);
+        let mut mov_opt = move_iter.next::<true>(self, hash_move, ply);
+        let mut i = 0;
 
-            board.make_move(mov);
+        while let Some(mov) = mov_opt {
+            // let evading_check = self.board.in_check();
 
-            let gives_check = board.in_check();
+            self.board.make_move(mov);
+
+            let gives_check = self.board.in_check();
 
             let mut extensions = 0;
 
-            let do_lmr = !gives_check && !self.is_killer_move(mov, ply) && !board.is_capture(mov);
-            //let do_futility = board.is_capture(mov) && static_eval + futility_margin < alpha;
+            //let do_lmr = if USE_KILLER {
+            //    !gives_check && !self.is_killer(mov, ply) && !self.board.is_capture(mov)
+            //} else {
+            //    !gives_check && !self.board.is_capture(mov)
+            //};
+
+            let do_lmr = !gives_check && !self.board.is_capture(mov);
+            //let do_futility = self.board.is_capture(mov) && static_eval + futility_margin < alpha;
 
             if gives_check {
                 extensions += 1;
@@ -396,16 +413,16 @@ impl Search {
             let mut eval;
 
             if i == 0 || !USE_PVS {
-                eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
+                eval = -self.pvs::<{ NodeType::PV as u8 }, false>(depth - 1 + extensions, -beta, -alpha, ply + 1);
             } else if USE_LMR && !do_lmr && i >= 4 && depth >= 3 {
-                let reduction = (if board.is_capture(mov) || mov.is_promotion() {
+                let reduction = (if self.board.is_capture(mov) || mov.is_promotion() {
                     0.20 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 3.35
                 } else {
                     1.35 + f64::ln(depth as f64) * f64::ln((i + 1) as f64) / 2.75
                 } as u32);
                 //let reduction = 1;
                 // Improved LMR formula with better tuned parameters
-                //let is_tactical = board.is_capture(mov) || mov.is_promotion();
+                //let is_tactical = self.board.is_capture(mov) || mov.is_promotion();
 
                 //// Base reduction calculation
                 //let base = if is_tactical { 0.5 } else { 1.0 };
@@ -418,26 +435,26 @@ impl Search {
                 // Ensure we don't reduce too much
                 let reduced_depth = (depth - 1 - reduction).max(1);
 
-                eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, reduced_depth, -(alpha + 1), -alpha, ply + 1);
+                eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(reduced_depth, -(alpha + 1), -alpha, ply + 1);
 
                 if eval > alpha {
-                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, depth - 1 + extensions, -(alpha + 1), -alpha, ply + 1);
+                    eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(depth - 1 + extensions, -(alpha + 1), -alpha, ply + 1);
 
                     if on_pv && eval > alpha && eval < beta {
-                        eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
+                        eval = -self.pvs::<{ NodeType::PV as u8 }, false>(depth - 1 + extensions, -beta, -alpha, ply + 1);
                     }
                 }
             } else {
                 // Non-PV nodes - scout with null window first
-                eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(board, depth - 1 + extensions, -(alpha + 1), -alpha, ply + 1);
+                eval = -self.pvs::<{ NodeType::NonPV as u8 }, false>(depth - 1 + extensions, -(alpha + 1), -alpha, ply + 1);
 
                 // Re-search with full window if the move looks promising
                 if on_pv && eval > alpha && eval < beta {
-                    eval = -self.pvs::<{ NodeType::PV as u8 }, false>(board, depth - 1 + extensions, -beta, -alpha, ply + 1);
+                    eval = -self.pvs::<{ NodeType::PV as u8 }, false>(depth - 1 + extensions, -beta, -alpha, ply + 1);
                 }
             }
 
-            board.unmake_move(mov);
+            self.board.unmake_move(mov);
 
             if self.should_quit(ply) {
                 return 0;
@@ -474,23 +491,28 @@ impl Search {
             if USE_ALPHA_BETA && eval >= beta {
                 evaluation_bound = Bound::Lower;
 
-                if !board.is_capture(mov) {
-                    self.history[board.side][mov.from()][mov.to()] += depth * depth;
-                    self.update_killer_moves(mov, ply);
+                if !self.board.is_capture(mov) {
+                    self.history[self.board.side][mov.from()][mov.to()] += depth * depth;
+                    if USE_KILLER {
+                        self.update_killers(mov, ply);
+                    }
                 }
                 break;
             }
+
+            i += 1;
+            mov_opt = move_iter.next::<false>(self, hash_move, ply);
         }
 
         if let Some(best_move) = best_move {
-            let entry = TranspositionEntry::new(depth as u8, best_eval as i16, best_move, evaluation_bound, board.zobrist_hash);
+            let entry = TranspositionEntry::new(depth as u8, best_eval as i16, best_move, evaluation_bound, self.board.zobrist_hash);
             transposition_table::global_store(entry);
         }
 
         best_eval
     }
 
-    fn quiescence_search(&mut self, board: &mut Board, mut alpha: i32, beta: i32, ply: u32) -> i32 {
+    fn quiescence_search(&mut self, mut alpha: i32, beta: i32, ply: u32) -> i32 {
         self.result.nodes += 1;
 
         if self.should_quit(ply) {
@@ -499,12 +521,12 @@ impl Search {
 
         // Currently not required since every move in quiescence is a capture and therefore
         // irreversible
-        if board.is_repetition(ply > 2) {
+        if self.board.is_repetition(ply > 2) {
             return 0;
         }
 
         // Stand pat evaluation
-        let stand_pat = evaluate(board);
+        let stand_pat = evaluate(&self.board);
         if stand_pat >= beta {
             return beta;
         }
@@ -512,8 +534,8 @@ impl Search {
         let mut hash_move = None;
 
         //if USE_TT {
-        //    if let Some(entry) = board.transposition_table.probe(board.zobrist_hash) {
-        //        if entry.hash == board.zobrist_hash {
+        //    if let Some(entry) = self.board.transposition_table.probe(self.board.zobrist_hash) {
+        //        if entry.hash == self.board.zobrist_hash {
         //            hash_move = Some(entry.best_move);
         //            self.result.transpositions += 1;
         //            match entry.node_type {
@@ -526,19 +548,24 @@ impl Search {
         //}
 
         // Generate and filter captures
-        let mut moves = generate_moves(board);
-        moves.retain(|mov| board.is_capture(*mov));
+        let mut moves = generate_moves(&self.board);
+        moves.retain(|mov| self.board.is_capture(*mov));
 
         if moves.is_empty() {
             return stand_pat;
         }
 
-        order_moves(self, board, &mut moves, ply, hash_move);
-
-        for mov in moves {
-            board.make_move(mov);
-            let eval = -self.quiescence_search(board, -beta, -alpha, ply + 1);
-            board.unmake_move(mov);
+        //let move_iter: Box<dyn Iterator<Item = Move>> = if USE_MOVE_ORDERING {
+        //    Box::new(MoveOrderer::new(moves, self, hash_move, ply).into_iter())
+        //} else {
+        //    Box::new(moves.into_iter())
+        //};
+        let mut move_iter = MoveOrderer::new(moves, self, hash_move, ply);
+        let mut mov_opt = move_iter.next::<true>(self, hash_move, ply);
+        while let Some(mov) = mov_opt {
+            self.board.make_move(mov);
+            let eval = -self.quiescence_search(-beta, -alpha, ply + 1);
+            self.board.unmake_move(mov);
 
             if self.should_quit(ply) {
                 return 0;
@@ -548,30 +575,31 @@ impl Search {
                 return beta;
             }
             alpha = alpha.max(eval);
+            mov_opt = move_iter.next::<false>(self, hash_move, ply);
         }
 
         alpha
     }
 
-    fn probe_syzygy_root(&mut self, board: &Board) -> DtzProbeResult {
+    fn probe_syzygy_root(&mut self) -> DtzProbeResult {
         let mut bitboards = u64x8::from_array([
-            *board.side_squares[Side::White],
-            *board.side_squares[Side::Black],
-            *(board.piece_squares[Piece::WhiteKing] | board.piece_squares[Piece::BlackKing]),
-            *(board.piece_squares[Piece::WhiteQueen] | board.piece_squares[Piece::BlackQueen]),
-            *(board.piece_squares[Piece::WhiteRook] | board.piece_squares[Piece::BlackRook]),
-            *(board.piece_squares[Piece::WhiteBishop] | board.piece_squares[Piece::BlackBishop]),
-            *(board.piece_squares[Piece::WhiteKnight] | board.piece_squares[Piece::BlackKnight]),
-            *(board.piece_squares[Piece::WhitePawn] | board.piece_squares[Piece::BlackPawn]),
+            *self.board.side_squares[Side::White],
+            *self.board.side_squares[Side::Black],
+            *(self.board.piece_squares[Piece::WhiteKing] | self.board.piece_squares[Piece::BlackKing]),
+            *(self.board.piece_squares[Piece::WhiteQueen] | self.board.piece_squares[Piece::BlackQueen]),
+            *(self.board.piece_squares[Piece::WhiteRook] | self.board.piece_squares[Piece::BlackRook]),
+            *(self.board.piece_squares[Piece::WhiteBishop] | self.board.piece_squares[Piece::BlackBishop]),
+            *(self.board.piece_squares[Piece::WhiteKnight] | self.board.piece_squares[Piece::BlackKnight]),
+            *(self.board.piece_squares[Piece::WhitePawn] | self.board.piece_squares[Piece::BlackPawn]),
         ]);
         bitboards = bitboards.swap_bytes();
         //for bitboard in bitboards.to_array().iter() {
         //    println!("{}", Bitboard(*bitboard));
         //}
-        //println!("ep {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
-        //println!("halfmove {}", board.state().halfmove_clock as u32 / 2);
-        //println!("fen {}", board.fen());
-        //println!("ep dadwa: {}", flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32);
+        //println!("ep {}", flip_rank(self.board.state().en_passant_square.unwrap_or(56)) as u32);
+        //println!("halfmove {}", self.board.state().halfmove_clock as u32 / 2);
+        //println!("fen {}", self.board.fen());
+        //println!("ep dadwa: {}", flip_rank(self.board.state().en_passant_square.unwrap_or(56)) as u32);
         return self
             .syzygy
             .probe_root(
@@ -583,11 +611,11 @@ impl Search {
                 bitboards[5],
                 bitboards[6],
                 bitboards[7],
-                board.state().halfmove_clock as u32 / 2,
-                flip_rank(board.state().en_passant_square.unwrap_or(56)) as u32,
-                board.side.value() == 0,
+                self.board.state().halfmove_clock as u32 / 2,
+                flip_rank(self.board.state().en_passant_square.unwrap_or(56)) as u32,
+                self.board.side.value() == 0,
             )
-            .expect(&format!("Syzygy tablebase probe failed, fen: {}", board.fen()));
+            .expect(&format!("Syzygy tablebase probe failed, fen: {}", self.board.fen()));
     }
     pub fn extract_pv(&self) -> Vec<Move> {
         let mut pv = Vec::with_capacity(self.pv_lengths[0]);
@@ -601,28 +629,22 @@ impl Search {
         pv
     }
 
-    fn update_killer_moves(&mut self, mov: Move, ply: u32) {
+    fn update_killers(&mut self, mov: Move, ply: u32) {
         let ply = ply as usize;
-        if !self.killer_moves[ply].contains(&Some(mov)) {
-            self.killer_moves[ply].rotate_right(1);
-            self.killer_moves[ply][0] = Some(mov);
+        if !self.killers[ply].contains(&Some(mov)) {
+            self.killers[ply].rotate_right(1);
+            self.killers[ply][0] = Some(mov);
         }
     }
 
-    pub fn is_killer_move(&self, mov: Move, ply: u32) -> bool {
-        for killer_move in self.killer_moves[ply as usize] {
-            if let Some(killer) = killer_move {
-                if killer == mov {
-                    return true;
-                }
-            }
-        }
-        return false;
+    pub fn is_killer(&self, mov: Move, ply: u32)-> bool {
+        // Check if the current move matches any of the killer moves at the given ply
+        self.killers[ply as usize].iter().any(|&killer_opt| killer_opt == Some(mov))
     }
 
-    fn calculate_time(&mut self, board: &Board) -> u128 {
-        let half_moves_left = Search::remaining_half_moves(board.total_material) as u128;
-        let time_left = self.params.clock.time[board.side] + self.params.clock.inc[board.side] * half_moves_left / 2;
+    fn calculate_time(&mut self) -> u128 {
+        let half_moves_left = Search::remaining_half_moves(self.board.total_material) as u128;
+        let time_left = self.params.clock.time[self.board.side] + self.params.clock.inc[self.board.side] * half_moves_left / 2;
         (time_left / half_moves_left) / 2
     }
 
@@ -673,6 +695,7 @@ impl Search {
 impl Default for Search {
     fn default() -> Self {
         Self {
+            board: Board::start_pos(),
             params: SearchParams::default(),
             result: SearchResult::default(),
             root_ply: 0,
@@ -680,10 +703,10 @@ impl Default for Search {
             pv_table: [[None; MAX_DEPTH]; MAX_DEPTH],
             pv_lengths: [0; MAX_DEPTH],
             max_time: 0,
-            killer_moves: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
+            killers: [[None; KILLER_MOVE_SLOTS]; MAX_DEPTH],
             should_quit: Arc::new(AtomicBool::new(false)),
             syzygy: pyrrhic_rs::TableBases::<Board>::new("./syzygy/tb345").unwrap(),
-            previous_static_eval: 0,
+            prev_static_eval: 0,
             history: [[[0; 64]; 64]; 2],
         }
     }

@@ -85,15 +85,17 @@ pub fn bench() {
     let mut time = Duration::ZERO;
     let mut nodes = 0;
     for fen in BENCHMARK_FENS {
-        let mut board = Board::from_fen(fen);
-        let mut search = Search::default();
+        let mut search = Search {
+            board: Board::from_fen(fen),
+            ..Default::default()
+        };
         let search_params = SearchParams {
             depth: Some(BENCHMARK_DEPTH),
             search_mode: SearchMode::Infinite,
             ..Default::default()
         };
         println!("fen: {}", fen);
-        let result = search.search(search_params, &mut board);
+        let result = search.search(search_params);
         time += result.time;
         nodes += result.nodes;
         println!();

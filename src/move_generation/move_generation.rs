@@ -22,8 +22,10 @@ const BLACK_KINGSIDE_SQUARES: [usize; 2] = [5, 6];
 const BLACK_QUEENSIDE_MASK: Bitboard = Bitboard(0x000000000000000E);
 const BLACK_QUEENSIDE_SQUARES: [usize; 2] = [3, 2];
 
-pub fn generate_moves(board: &Board) -> ArrayVec<Move, MAX_LEGAL_MOVES> {
-    let mut moves = ArrayVec::<Move, MAX_LEGAL_MOVES>::new();
+pub type MoveVec = ArrayVec<Move, MAX_LEGAL_MOVES>;
+
+pub fn generate_moves(board: &Board) -> MoveVec {
+    let mut moves = MoveVec::new();
 
     generate_king_moves(&mut moves, board);
 
@@ -63,7 +65,7 @@ pub fn generate_moves(board: &Board) -> ArrayVec<Move, MAX_LEGAL_MOVES> {
     moves
 }
 #[inline(always)]
-fn generate_pawn_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn generate_pawn_moves<const IS_WHITE: bool>(moves: &mut MoveVec, board: &Board) {
     let (up_left, up_right, up) = if IS_WHITE { (Direction::NorthWest, Direction::NorthEast, Direction::North) } else { (Direction::SouthEast, Direction::SouthWest, Direction::South) };
 
     let (double_push_rank, pre_promotion_rank) = if IS_WHITE { (RANK_3, RANK_7) } else { (RANK_6, RANK_2) };
@@ -102,7 +104,7 @@ fn generate_pawn_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGA
     generate_en_passant_moves(moves, board);
 }
 #[inline(always)]
-fn generate_knight_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn generate_knight_moves(moves: &mut MoveVec, board: &Board) {
     //let knights = board.piece_squares[Piece::new(PieceType::Knight, board.side)] & !(board.orthogonal_pinmask | board.diagonal_pinmask);
     //println!("knights: {}", knights);
     //println!("diagonal: {}", board.diagonal_pinmask);
@@ -120,7 +122,7 @@ fn generate_knight_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Bo
     }
 }
 #[inline(always)]
-fn generate_bishop_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn generate_bishop_moves(moves: &mut MoveVec, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Bishop, board.side)];
 
     for from in bitboard {
@@ -142,7 +144,7 @@ fn generate_bishop_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Bo
     //}
 }
 #[inline(always)]
-fn generate_rook_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn generate_rook_moves(moves: &mut MoveVec, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Rook, board.side)];
 
     for from in bitboard {
@@ -170,7 +172,7 @@ fn generate_rook_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
     //}
 }
 #[inline(always)]
-fn generate_queen_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn generate_queen_moves(moves: &mut MoveVec, board: &Board) {
     let bitboard = board.piece_squares[Piece::new(PieceType::Queen, board.side)];
 
     for from in bitboard {
@@ -198,7 +200,7 @@ fn generate_queen_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boa
     //}
 }
 #[inline(always)]
-fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn generate_king_moves(moves: &mut MoveVec, board: &Board) {
     let from = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
     let enemy_king_square = board.piece_squares[Piece::new(PieceType::King, board.side.enemy())];
     let attack_bitboard = get_king_attack_mask(from) & !board.friendly_squares();
@@ -210,7 +212,7 @@ fn generate_king_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Boar
     }
 }
 #[inline(always)]
-fn generate_castling_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn generate_castling_moves<const IS_WHITE: bool>(moves: &mut MoveVec, board: &Board) {
     if IS_WHITE {
         if can_castle(board, WHITE_KINGSIDE_MASK, WHITE_KINGSIDE_SQUARES) && board.state().castling_rights[Side::White].kingside {
             unsafe { moves.push_unchecked(Move::new(60, 62, MoveType::KingsideCastle)) }
@@ -228,7 +230,7 @@ fn generate_castling_moves<const IS_WHITE: bool>(moves: &mut ArrayVec<Move, MAX_
     }
 }
 #[inline(always)]
-fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn generate_en_passant_moves(moves: &mut MoveVec, board: &Board) {
     if let Some(to) = board.state().en_passant_square {
         let mut en_passant_pawns = board.piece_squares[Piece::new(PieceType::Pawn, board.side)] & get_pawn_attack(board.side, to);
 
@@ -290,7 +292,7 @@ fn generate_en_passant_moves(moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board:
     }
 }
 #[inline(always)]
-fn resolve_single_check<const IS_WHITE: bool>(attacker_square: usize, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, board: &Board) {
+fn resolve_single_check<const IS_WHITE: bool>(attacker_square: usize, moves: &mut MoveVec, board: &Board) {
     let king_square = board.piece_squares[Piece::new(PieceType::King, board.side)].lsb();
 
     // if the checker is a slider, we can block the check
@@ -344,7 +346,7 @@ fn resolve_single_check<const IS_WHITE: bool>(attacker_square: usize, moves: &mu
     add_moves(|from| Move::new(from, attacker_square, MoveType::Normal), moves, capturers, board);
 }
 #[inline(always)]
-fn add_moves<F: Fn(usize) -> Move>(mov: F, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, bitboard: Bitboard, board: &Board) {
+fn add_moves<F: Fn(usize) -> Move>(mov: F, moves: &mut MoveVec, bitboard: Bitboard, board: &Board) {
     for to in bitboard {
         let mov = mov(to);
         if legal(board, mov.from(), mov.to()) {
@@ -353,13 +355,13 @@ fn add_moves<F: Fn(usize) -> Move>(mov: F, moves: &mut ArrayVec<Move, MAX_LEGAL_
     }
 }
 #[inline(always)]
-fn add_moves_new<F: Fn(usize) -> Move>(mov: F, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, bitboard: Bitboard, board: &Board) {
+fn add_moves_new<F: Fn(usize) -> Move>(mov: F, moves: &mut MoveVec, bitboard: Bitboard, board: &Board) {
     for to in bitboard {
         unsafe { moves.push_unchecked(mov(to)) }
     }
 }
 #[inline(always)]
-fn add_promotions<F: Fn(usize) -> usize>(from: F, moves: &mut ArrayVec<Move, MAX_LEGAL_MOVES>, bitboard: Bitboard, board: &Board) {
+fn add_promotions<F: Fn(usize) -> usize>(from: F, moves: &mut MoveVec, bitboard: Bitboard, board: &Board) {
     for to in bitboard {
         let from = from(to);
         if legal(board, from, to) {
